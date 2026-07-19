@@ -1,0 +1,10 @@
+app_vedecom/
+**/__pycache__/
+*.pyc
+db.sqlite3
+.git
+.gitignore
+*.log
+node_modules/
+theme/static_src/node_modules/
+.env
