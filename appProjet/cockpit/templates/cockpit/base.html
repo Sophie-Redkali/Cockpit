@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Cockpit{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+ 
+    <link href="{% static 'cockpit/css/cockpit.css' %}" rel="stylesheet">
+
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+
+    <link href="{% static 'cockpit/css/tom-select.default.min.css' %}" rel="stylesheet">
+    <script src="{% static 'cockpit/js/tom-select.complete.js' %}"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="cockpit-header">
+        <div class="cockpit-header__breadcrumb">
+            {% block breadcrumb %}Cockpit{% endblock %}
+        </div>
+        <nav class="cockpit-header__nav">
+            <button type="button" class="cockpit-header__menu-toggle" id="menu-toggle"
+                    aria-label="Ouvrir le menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+            <ul class="cockpit-header__menu" id="menu-list">
+                {% block nav_menu %}
+                <li><a href="{% url 'accueil' %}">Accueil</a></li>
+                {% endblock %}
+            </ul>
+        </nav>
+    </header>
+ 
+    <main class="cockpit-main">
+        {% block content %}{% endblock %}
+    </main>
+ 
+    <script>
+        const menuToggle = document.getElementById('menu-toggle');
+        const menuList = document.getElementById('menu-list');
+        menuToggle.addEventListener('click', () => {
+            const isOpen = menuList.classList.toggle('is-open');
+            menuToggle.setAttribute('aria-expanded', isOpen);
+        });
+        document.addEventListener('click', (event) => {
+            if (!menuToggle.contains(event.target) && !menuList.contains(event.target)) {
+                menuList.classList.remove('is-open');
+                menuToggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

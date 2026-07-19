@@ -1,0 +1,26 @@
+{% extends "cockpit/base.html" %}
+
+{% block title %}Cockpit — Accueil{% endblock %}
+
+{% block breadcrumb %}Cockpit{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-grid">
+    <a href="#" class="cockpit-tile cockpit-tile--public">Demande de vacation</a>
+    <a href="{% url 'contact_create' %}" class="cockpit-tile cockpit-tile--public">Créer un nouveau contact</a>
+    <a href="{% url 'evenement_create' %}" class="cockpit-tile cockpit-tile--public">Demander l'organisation d'un évènement</a>
+
+    <a href="#" class="cockpit-tile cockpit-tile--public">Enregistrer une participation</a>
+    <a href="#" class="cockpit-tile cockpit-tile--restricted">CRM</a>
+    <a href="#" class="cockpit-tile cockpit-tile--restricted">Projets</a>
+
+    <a href="#" class="cockpit-tile cockpit-tile--restricted">Évènements</a>
+    <a href="{% url 'projet_create' %}" class="cockpit-tile cockpit-tile--public">Enregistrer un projet</a>
+    <a href="#" class="cockpit-tile cockpit-tile--public">Déclarer une invention</a>
+    <!-- <div class="cockpit-tile cockpit-tile--empty" aria-hidden="true"></div> -->
+</div>
+{% endblock %}

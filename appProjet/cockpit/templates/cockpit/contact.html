@@ -1,0 +1,279 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — Nouveau contact{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'accueil' %}">Cockpit</a> &gt; Nouveau contact{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+<li><a href="{% url 'projet_create' %}">Enregistrer un projet</a></li>
+<li><a href="#">Déclarer une vacation</a></li>
+<li><a href="#">Demander un évènement</a></li>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-form-card" id="contact-screen">
+    <h2>Nouveau contact</h2>
+
+    {% if form.non_field_errors %}
+        <div class="cockpit-alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% if doublons %}
+    <div class="cockpit-alert">
+        <p>
+            Un ou plusieurs contacts déjà enregistrés partagent le même email et/ou
+            le même téléphone :
+        </p>
+        <ul>
+            {% for c in doublons %}
+            <li>
+                {{ c.prenom_contact }} {{ c.nom_contact }}
+                {% if c.entite %}— {{ c.entite.nom }}{% endif %}
+                {% if c.email_contact %}— {{ c.email_contact }}{% endif %}
+                {% if c.telephone_contact %}— {{ c.telephone_contact }}{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <label class="cockpit-checkbox-field" for="{{ form.force_creation.id_for_label }}">
+            {{ form.force_creation }}
+            <span>{{ form.force_creation.label }} (il ne s'agit pas de la même personne)</span>
+        </label>
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" id="contact-form">
+        {% csrf_token %}
+
+        <div class="cockpit-field">
+            <label for="{{ form.prenom_contact.id_for_label }}">Prénom</label>
+            {{ form.prenom_contact }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ form.nom_contact.id_for_label }}">Nom</label>
+            {{ form.nom_contact }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ form.email_contact.id_for_label }}">Email</label>
+            {{ form.email_contact }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ form.telephone_contact.id_for_label }}">Téléphone</label>
+            {{ form.telephone_contact }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ form.poste_contact.id_for_label }}">Poste</label>
+            {{ form.poste_contact }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="id_entite">Entité (employeur)</label>
+            {{ form.entite_selection }}
+            <p class="cockpit-placeholder">
+                Entité introuvable dans la liste ? Choisissez "Autre" pour en enregistrer une nouvelle.
+            </p>
+        </div>
+
+        <!-- Résumé affiché une fois la nouvelle entité renseignée (mode "écran dédié" sur téléphone) -->
+        <div class="cockpit-field" id="entite-summary" style="display:none;">
+            <p class="cockpit-readonly">
+                Nouvelle entité : <strong id="entite-summary-nom"></strong>
+                — <a href="#" id="entite-summary-edit">Modifier</a>
+            </p>
+        </div>
+
+        <!-- Emplacement d'accueil du mini-formulaire "nouvelle entité" en mode inline (ordinateur / tablette) -->
+        <div id="entite-inline-slot"></div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.fichier.id_for_label }}">Document (optionnel)</label>
+            {{ form.fichier }}
+        </div>
+
+        <!-- Mini-formulaire "nouvelle entité" : un seul jeu de champs, déplacé en JS
+             soit dans #entite-inline-slot (ordinateur/tablette), soit dans l'écran
+             plein écran #entite-mobile-screen (téléphone). -->
+        <div id="entite-mini-form" style="display:none;" data-has-errors="{% if entite_mini_form.errors %}true{% else %}false{% endif %}">
+            <div class="cockpit-ordi">
+                <div class="cockpit-eval-section">
+                    <h3>Nouvelle entité</h3>
+                    {% if entite_mini_form.non_field_errors %}
+                        <div class="cockpit-alert">{{ entite_mini_form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.nom.id_for_label }}">{{ entite_mini_form.nom.label }} *</label>
+                        {{ entite_mini_form.nom }}
+                        {% if entite_mini_form.nom.errors %}
+                            <p class="cockpit-alert">{{ entite_mini_form.nom.errors }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="cockpit-inline-group">
+                        <div class="cockpit-field">
+                            <label for="{{ entite_mini_form.type_entite.id_for_label }}">{{ entite_mini_form.type_entite.label }}</label>
+                            {{ entite_mini_form.type_entite }}
+                        </div>
+                        <div class="cockpit-field">
+                            <label for="{{ entite_mini_form.secteur_entite.id_for_label }}">{{ entite_mini_form.secteur_entite.label }}</label>
+                            {{ entite_mini_form.secteur_entite }}
+                        </div>
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.telephone_entite.id_for_label }}">{{ entite_mini_form.telephone_entite.label }}</label>
+                        {{ entite_mini_form.telephone_entite }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.adresse_entite.id_for_label }}">{{ entite_mini_form.adresse_entite.label }}</label>
+                        {{ entite_mini_form.adresse_entite }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.url_entite.id_for_label }}">{{ entite_mini_form.url_entite.label }}</label>
+                        {{ entite_mini_form.url_entite }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="cockpit-btn">Enregistrer</button>
+    </form>
+</div>
+
+<!-- Écran dédié "Nouvelle entité", utilisé uniquement sur téléphone (cf JS + media query) -->
+<div class="cockpit-mobile-screen" id="entite-mobile-screen" style="display:none;">
+    <div class="cockpit-form-card">
+        <h2>Nouvelle entité</h2>
+        <p class="cockpit-placeholder">
+            Entité introuvable dans la liste : renseignez au minimum son nom, les autres
+            informations pourront être complétées plus tard.
+        </p>
+        <div id="entite-mobile-mount"></div>
+        <div class="cockpit-inline-group">
+            <button type="button" class="cockpit-btn-secondary" id="btn-cancel-entite-mobile">Annuler</button>
+            <button type="button" class="cockpit-btn" id="btn-save-entite-mobile">Enregistrer l'entité</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const MOBILE_BREAKPOINT = '(max-width: 700px)';
+    const isMobile = () => window.matchMedia(MOBILE_BREAKPOINT).matches;
+
+    const contactScreen = document.getElementById('contact-screen');
+    const entiteMobileScreen = document.getElementById('entite-mobile-screen');
+    const entiteMiniForm = document.getElementById('entite-mini-form');
+    const entiteInlineSlot = document.getElementById('entite-inline-slot');
+    const entiteMobileMount = document.getElementById('entite-mobile-mount');
+    const entiteSummary = document.getElementById('entite-summary');
+    const entiteSummaryNom = document.getElementById('entite-summary-nom');
+    const entiteSummaryEdit = document.getElementById('entite-summary-edit');
+    const nomEntiteInput = document.getElementById('{{ entite_mini_form.nom.id_for_label }}');
+
+    function afficherMiniFormInline() {
+        entiteInlineSlot.appendChild(entiteMiniForm);
+        entiteMiniForm.style.display = 'block';
+        entiteMobileScreen.style.display = 'none';
+        contactScreen.style.display = 'block';
+    }
+
+    function afficherMiniFormPleinEcran() {
+        entiteMobileMount.appendChild(entiteMiniForm);
+        entiteMiniForm.style.display = 'block';
+        entiteMobileScreen.style.display = 'flex';
+        contactScreen.style.display = 'none';
+    }
+
+    function masquerMiniForm() {
+        entiteMiniForm.style.display = 'none';
+        entiteMobileScreen.style.display = 'none';
+        contactScreen.style.display = 'block';
+    }
+
+    // Tom Select : option statique "Autre" toujours disponible, en plus
+    // des entités trouvées par recherche AJAX.
+    new TomSelect('#id_entite', {
+        valueField: "id",
+        labelField: "nom",
+        searchField: "nom",
+        create: false,
+        options: [{ id: "autre", nom: "Autre (entité non trouvée, à créer)" }],
+        load: function(query, callback) {
+            fetch(`/api/entite/recherche/?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => callback(data))
+                .catch(() => callback());
+        },
+        onChange: function(value) {
+            if (value === 'autre') {
+                if (isMobile()) {
+                    afficherMiniFormPleinEcran();
+                } else {
+                    afficherMiniFormInline();
+                }
+                entiteSummary.style.display = 'none';
+            } else {
+                masquerMiniForm();
+                entiteSummary.style.display = 'none';
+            }
+        },
+    });
+
+    // Bouton "Enregistrer l'entité" : uniquement sur téléphone. Valide
+    // localement que le nom est renseigné, puis revient à l'écran contact
+    // en affichant un résumé. L'entité n'est réellement créée en base que
+    // lors de l'enregistrement global du contact (bouton principal).
+    const btnSaveEntiteMobile = document.getElementById('btn-save-entite-mobile');
+    if (btnSaveEntiteMobile) {
+        btnSaveEntiteMobile.addEventListener('click', function () {
+            const nom = (nomEntiteInput.value || '').trim();
+            if (!nom) {
+                nomEntiteInput.focus();
+                nomEntiteInput.reportValidity ? (nomEntiteInput.required = true, nomEntiteInput.reportValidity()) : alert("Le nom de l'entité est obligatoire.");
+                return;
+            }
+            entiteSummaryNom.textContent = nom;
+            entiteSummary.style.display = 'block';
+            afficherMiniFormInline();
+            entiteMiniForm.style.display = 'none';
+            contactScreen.style.display = 'block';
+            entiteMobileScreen.style.display = 'none';
+        });
+    }
+
+    // Bouton "Annuler" : retour à l'écran contact sans validation
+    const btnCancelEntiteMobile = document.getElementById('btn-cancel-entite-mobile');
+    if (btnCancelEntiteMobile) {
+        btnCancelEntiteMobile.addEventListener('click', function () {
+            contactScreen.style.display = 'block';
+            entiteMobileScreen.style.display = 'none';
+        });
+    }
+
+    // Réouverture de l'écran (mobile) ou de la section inline (desktop)
+    // pour modifier l'entité déjà renseignée
+    if (entiteSummaryEdit) {
+        entiteSummaryEdit.addEventListener('click', function (event) {
+            event.preventDefault();
+            if (isMobile()) {
+                afficherMiniFormPleinEcran();
+            } else {
+                afficherMiniFormInline();
+            }
+        });
+    }
+
+    // Si le formulaire est réaffiché suite à une erreur de validation (ex :
+    // nom de l'entité manquant), on ré-affiche directement le mini-formulaire
+    // avec les données déjà saisies. L'info vient d'un attribut data-* (posé
+    // par Django dans le HTML) plutôt que d'un tag Django mélangé au JS.
+    if (entiteMiniForm.dataset.hasErrors === 'true') {
+        if (isMobile()) {
+            afficherMiniFormPleinEcran();
+        } else {
+            afficherMiniFormInline();
+        }
+    }
+</script>
+{% endblock %}

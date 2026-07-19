@@ -1,0 +1,47 @@
+{% load static %}
+
+{% block content %}
+
+<head>
+    <link href="{% static 'cockpit/css/tom-select.default.min.css' %}" rel="stylesheet">
+    <script src="{% static 'cockpit/js/tom-select.complete.js' %}"></script>
+</head>
+
+<body>
+    <section class="header">
+        
+    </section>
+    <section class="my-content">
+        <div class="form-container">
+            <form method="post">
+                {% csrf_token %}
+                {{ form.prenom_contact }}
+                {{ form.nom_contact }}
+                {{ form.email_contact }}
+                {{ form.telephone_contact }}
+                {{ form.poste_contact }}
+
+                <label for="id_entite">Entité (employeur)</label>
+                {{ form.entite }}
+
+                <button type="submit">Enregistrer</button>
+            </form>
+            <script>
+                new TomSelect('#id_entite', {
+                    valueField: "id",
+                    labelField: "nom",
+                    searchField: "nom",
+                    create: function(input) {
+                        return { id: 'new:${input}', nom: input};
+                    },
+                    load: function(query, callback) {
+                        fetch('/api/entites/recherche/?q=${encodeURIComponent(query)}')
+                        .then(res => res.json())
+                        .then(data => callback(data))
+                        .catch(() => callback());
+                    },
+                });
+            </script>
+        </div>
+    </section>
+</body>

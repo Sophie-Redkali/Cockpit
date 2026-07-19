@@ -1,0 +1,411 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — Projet{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'accueil' %}">Cockpit</a> &gt;
+<a href="#">Projets</a> &gt;
+{% if projet %}{{ projet.nom_projet|default:"Projet sans nom" }}{% else %}Nouveau projet{% endif %}
+{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+<li><a href="{% url 'projet_create' %}">Nouveau projet</a></li>
+<li><a href="#">Voir tous les projets</a></li>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-form-card">
+    <div class="cockpit-projet-header">
+        <h2>
+            {% if projet %}{{ projet.nom_projet|default:"Projet sans nom" }}{% else %}Nouveau projet{% endif %}
+        </h2>
+        <span class="cockpit-badge">{{ form.instance.get_statut_actuel_display|default:"Vivier" }}</span>
+    </div>
+
+    {% if form.non_field_errors %}
+        <div class="cockpit-alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Onglets -->
+        <div class="cockpit-tabs" role="tablist">
+            {% for cle, libelle, champs in onglets %}
+            <button type="button"
+                    class="cockpit-tab{% if forloop.first %} is-active{% endif %}"
+                    data-tab-target="tab-{{ cle }}"
+                    role="tab">
+                {{ libelle }}
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- Panneaux -->
+        {% for cle, libelle, champs in onglets %}
+        <div class="cockpit-tab-panel{% if forloop.first %} is-active{% endif %}" id="tab-{{ cle }}" role="tabpanel">
+
+            {% if cle == "general" %}
+                <div class="cockpit-inline-group">
+                    <div class="cockpit-field">
+                        <label for="{{ form.nom_projet.id_for_label }}">Nom du projet</label>
+                        {{ form.nom_projet }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ form.acronyme_projet.id_for_label }}">Acronyme</label>
+                        {{ form.acronyme_projet }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ form.confidentiel.id_for_label }}">
+                            Projet confidentiel {{ form.confidentiel }}
+                        </label>
+                    </div>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.strat.id_for_label }}">Programme stratégique</label>
+                    {{ form.strat }}
+                </div>
+
+                <!-- Domaines -->
+                <div class="cockpit-field">
+                    <label for="{{ form.domaine_principal.id_for_label }}">Domaine principal</label>
+                    {{ form.domaine_principal }}
+                </div>
+                <div class="cockpit-inline-group">
+                    <div class="cockpit-field">
+                        <label for="{{ form.domaine_secondaire_1.id_for_label }}">Domaine secondaire 1</label>
+                        {{ form.domaine_secondaire_1 }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ form.domaine_secondaire_2.id_for_label }}">Domaine secondaire 2</label>
+                        {{ form.domaine_secondaire_2 }}
+                    </div>
+                </div>
+
+                <div class="cockpit-field">
+                    <label for="{{ form.type_projet.id_for_label }}">Type de projet</label>
+                    {{ form.type_projet }}
+                </div>
+                <div class="cockpit-field" id="wrapper-type-autre" style="display:none;">
+                    <label for="{{ form.type_projet_autre.id_for_label }}">Préciser le type</label>
+                    {{ form.type_projet_autre }}
+                </div>
+                <div class="cockpit-field" id="wrapper-call-eu" style="display:none;">
+                    <label for="{{ form.call_eu.id_for_label }}">Call européen</label>
+                    {{ form.call_eu }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.nom_appel_contrat.id_for_label }}">Nom de l'appel / du contrat</label>
+                    {{ form.nom_appel_contrat }}
+                </div>
+                <div class="cockpit-inline-group">
+                    <div class="cockpit-field">
+                        <label for="{{ form.date_debut_prevu.id_for_label }}">Date de début prévue{{ form.date_debut_prevu.label }}</label>
+                        <p class="cockpit-placeholder">Date estimée pour le début du projet.</p>
+                        {{ form.date_debut_prevu }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ form.date_fin_prevu.id_for_label }}">Date de fin prévue{{ form.date_fin_prevu.label }}</label>
+                        <p class="cockpit-placeholder">Date estimée pour la fin du projet.</p>
+                        {{ form.date_fin_prevu }}
+                    </div>
+                
+                    <div class="cockpit-field">
+                        <label for="{{ form.date_limite_soumission.id_for_label }}">{{ form.date_limite_soumission.label }}</label>
+                        <p class="cockpit-placeholder">Une date saisie ici crée automatiquement une échéance "Deadline soumission".</p>
+                        {{ form.date_limite_soumission }}
+                    </div>
+                </div>
+
+                {% if jalons_visibles %}
+                <div class="cockpit-field">
+                    <label>Jalons (kickoff / mi-parcours / final)</label>
+                    <div class="cockpit-inline-group">
+                        {{ form.event_kickoff }}
+                        {{ form.event_middle }}
+                        {{ form.event_fin }}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="cockpit-field">
+                    <label for="{{ form.reussite_estime.id_for_label }}">Estimation de réussite (%)</label>
+                    {{ form.reussite_estime }}
+                    <p class="cockpit-placeholder">Estimation de réponse positive lors de la soumission du projet.</p>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.budget_total.id_for_label }}">{{ form.budget_total.label }}</label>
+                    {{ form.budget_total }}
+                </div>
+
+                {% if est_au_dela_du_vivier %}
+                <!-- Champs apparaissant à partir du cadrage -->
+                <div class="cockpit-field">
+                    <label for="{{ form.responsable_projet.id_for_label }}">{{ form.responsable_projet.label }}</label>
+                    {{ form.responsable_projet }}
+                    <p class="cockpit-placeholder">Saisie libre pour l'instant ; sera remplacé par une recherche Azure AD.</p>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form_cadrage.porteur_projet_texte.id_for_label }}">{{ form_cadrage.porteur_projet_texte.label }}</label>
+                    {{ form_cadrage.porteur_projet_texte }}
+                    <p class="cockpit-placeholder">Texte libre pour l'instant ; deviendra un lien vers un contact ou une entité.</p>
+                </div>
+
+                <div class="cockpit-eval-section">
+                    <h3>Partenaires du projet</h3>
+                    {{ partenaire_formset.management_form }}
+                    <div id="partenaire-rows">
+                        {% for partenaire_form in partenaire_formset %}
+                        <div class="cockpit-eval-row">
+                            {{ partenaire_form.id }}
+                            {{ partenaire_form.entite }}
+                            {% if partenaire_form.instance.pk %}
+                            <label class="cockpit-eval-delete">
+                                {{ partenaire_form.DELETE }} Supprimer
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="cockpit-btn-secondary" id="add-partenaire-row">+ Ajouter un partenaire</button>
+
+                    <div id="partenaire-empty-form" style="display:none;">
+                        <div class="cockpit-eval-row">
+                            {{ partenaire_formset.empty_form.entite }}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="cockpit-field">
+                    <label for="{{ form.documents.id_for_label }}">Documents (optionnel, plusieurs fichiers possibles)</label>
+                    {{ form.documents }}
+                </div>
+            {% endif %}
+
+            {% if cle == "scientifique" %}
+                <!-- <div class="cockpit-field">
+                    <label for="{{ form.contrib_vedecom.id_for_label }}">Contribution Vedecom</label>
+                    {{ form.contrib_vedecom }}
+                </div> -->
+                <div class="cockpit-field">
+                    <label for="{{ form_sci.objectifs_projet.id_for_label }}">{{ form_sci.objectifs_projet.label }}</label>
+                    {{ form_sci.objectifs_projet }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form_sci.axes_feuille_route.id_for_label }}">{{ form_sci.axes_feuille_route.label }}</label>
+                    {{ form_sci.axes_feuille_route }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form_sci.principaux_resultats.id_for_label }}">{{ form_sci.principaux_resultats.label }}</label>
+                    {{ form_sci.principaux_resultats }}
+                </div>
+
+                <!-- Équipe impliquée (formset, table projet_mgmt.equipe) -->
+                <div class="cockpit-eval-section">
+                    <h3>Équipe impliquée (si déjà définie)</h3>
+                    <p class="cockpit-placeholder">
+                        Saisie libre pour l'instant ; sera remplacée par une recherche Azure AD (prénom/nom) une fois l'authentification en place.
+                    </p>
+                    {{ equipe_formset.management_form }}
+                    <div id="equipe-rows">
+                        {% for equipe_form in equipe_formset %}
+                        <div class="cockpit-eval-row">
+                            {{ equipe_form.id }}
+                            {{ equipe_form.nom_equipier }}
+                            {% if equipe_form.instance.pk %}
+                            <label class="cockpit-eval-delete">
+                                {{ equipe_form.DELETE }} Supprimer
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="cockpit-btn-secondary" id="add-equipe-row">+ Ajouter un membre</button>
+
+                    <div id="equipe-empty-form" style="display:none;">
+                        <div class="cockpit-eval-row">
+                            {{ equipe_formset.empty_form.nom_equipier }}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cockpit-field">
+                    <label for="{{ form_sci.besoins_materiels_logiciels.id_for_label }}">{{ form_sci.besoins_materiels_logiciels.label }}</label>
+                    {{ form_sci.besoins_materiels_logiciels }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form_sci.theses_prevues.id_for_label }}">{{ form_sci.theses_prevues.label }}</label>
+                    {{ form_sci.theses_prevues }}
+                </div>
+            {% endif %}
+
+            {% if cle == "benefices" %}
+                <!-- Section Bénéfices -->
+                <div class="cockpit-eval-section">
+                    <h3>Bénéfices</h3>
+                    {{ benefice_formset.management_form }}
+                    <div id="benefice-rows">
+                        {% for eval_form in benefice_formset %}
+                        <div class="cockpit-eval-row">
+                            {{ eval_form.id }}
+                            {{ eval_form.contenu }}
+                            {% if eval_form.instance.pk %}
+                            <label class="cockpit-eval-delete">
+                                {{ eval_form.DELETE }} Supprimer
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="cockpit-btn-secondary" id="add-benefice-row">+ Ajouter un bénéfice</button>
+
+                    <!-- gabarit caché utilisé par le JS pour cloner une nouvelle ligne -->
+                    <div id="benefice-empty-form" style="display:none;">
+                        <div class="cockpit-eval-row">
+                            {{ benefice_formset.empty_form.contenu }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Contre-bénéfices -->
+                <div class="cockpit-eval-section">
+                    <h3>Contre-bénéfices</h3>
+                    {{ contre_formset.management_form }}
+                    <div id="contre-rows">
+                        {% for eval_form in contre_formset %}
+                        <div class="cockpit-eval-row">
+                            {{ eval_form.id }}
+                            {{ eval_form.contenu }}
+                            {% if eval_form.instance.pk %}
+                            <label class="cockpit-eval-delete">
+                                {{ eval_form.DELETE }} Supprimer
+                            </label>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="cockpit-btn-secondary" id="add-contre-row">+ Ajouter un contre-bénéfice</button>
+
+                    <div id="contre-empty-form" style="display:none;">
+                        <div class="cockpit-eval-row">
+                            {{ contre_formset.empty_form.contenu }}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if cle == "financier" %}
+                <div class="cockpit-field">
+                    <label for="{{ form.budget_vedecom.id_for_label }}">Budget Vedecom</label>
+                    {{ form.budget_vedecom }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.pm_valide.id_for_label }}">PM validés</label>
+                    {{ form.pm_valide }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.pm_rate_projet.id_for_label }}">Taux PM projet</label>
+                    {{ form.pm_rate_projet }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.ngrant_eu.id_for_label }}">N° de grant EU</label>
+                    {{ form.ngrant_eu }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.core_group_eu.id_for_label }}">{{ form.core_group_eu }} Core group EU</label>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.sr_pilot_eu.id_for_label }}">{{ form.sr_pilot_eu }} SR pilot EU</label>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.lump_sum_eu.id_for_label }}">{{ form.lump_sum_eu }} Lump sum EU</label>
+                </div>
+            {% endif %}
+
+            {% if cle == "decision" %}
+                <div class="cockpit-field">
+                    <label>Statut actuel</label>
+                    <p class="cockpit-readonly">{{ form.instance.get_statut_actuel_display }}</p>
+                    <p class="cockpit-placeholder">
+                        Le changement de statut sera géré par un circuit de décision dédié (droits administrateur), pas encore en place.
+                    </p>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.date_debut_reel.id_for_label }}">Date de début réelle</label>
+                    {{ form.date_debut_reel }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ form.date_fin_reel.id_for_label }}">Date de fin réelle</label>
+                    {{ form.date_fin_reel }}
+                </div>
+            {% endif %}
+
+        </div>
+        {% endfor %}
+
+        <button type="submit" class="cockpit-btn">Enregistrer</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Bascule d'onglets, sans rechargement de page
+    document.querySelectorAll('.cockpit-tab').forEach(function (tabButton) {
+        tabButton.addEventListener('click', function () {
+            document.querySelectorAll('.cockpit-tab').forEach(function (b) { b.classList.remove('is-active'); });
+            document.querySelectorAll('.cockpit-tab-panel').forEach(function (p) { p.classList.remove('is-active'); });
+
+            tabButton.classList.add('is-active');
+            document.getElementById(tabButton.dataset.tabTarget).classList.add('is-active');
+        });
+    });
+
+    // Affichage conditionnel du champ "préciser le type" et du champ "call_eu"
+    const typeSelect = document.getElementById('id_type_projet');
+    const wrapperAutre = document.getElementById('wrapper-type-autre');
+    const wrapperCallEu = document.getElementById('wrapper-call-eu');
+    if (typeSelect) {
+        function toggleTypeChamps() {
+            if (wrapperAutre) {
+                wrapperAutre.style.display = (typeSelect.value === 'autre') ? 'block' : 'none';
+            }
+            if (wrapperCallEu) {
+                wrapperCallEu.style.display = (typeSelect.value === 'Europe') ? 'block' : 'none';
+            }
+        }
+        typeSelect.addEventListener('change', toggleTypeChamps);
+        toggleTypeChamps();
+    }
+
+    // Ajout dynamique de lignes pour les formsets bénéfices / contre-bénéfices / équipe / partenaires
+    function setupFormsetAdd(addButtonId, rowsContainerId, emptyFormId, prefix) {
+        const addButton = document.getElementById(addButtonId);
+        const rowsContainer = document.getElementById(rowsContainerId);
+        const emptyFormTemplate = document.getElementById(emptyFormId);
+        const totalFormsInput = document.querySelector(`#id_${prefix}-TOTAL_FORMS`);
+
+        if (!addButton || !rowsContainer || !emptyFormTemplate || !totalFormsInput) return;
+
+        addButton.addEventListener('click', function () {
+            const formIndex = parseInt(totalFormsInput.value, 10);
+            const newRowHtml = emptyFormTemplate.innerHTML.replace(/__prefix__/g, formIndex);
+
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = newRowHtml;
+            rowsContainer.appendChild(wrapper.firstElementChild);
+
+            totalFormsInput.value = formIndex + 1;
+        });
+    }
+
+    setupFormsetAdd('add-benefice-row', 'benefice-rows', 'benefice-empty-form', 'benefice');
+    setupFormsetAdd('add-contre-row', 'contre-rows', 'contre-empty-form', 'contre');
+    setupFormsetAdd('add-equipe-row', 'equipe-rows', 'equipe-empty-form', 'equipe');
+    setupFormsetAdd('add-partenaire-row', 'partenaire-rows', 'partenaire-empty-form', 'partenaire');
+</script>
+{% endblock %}

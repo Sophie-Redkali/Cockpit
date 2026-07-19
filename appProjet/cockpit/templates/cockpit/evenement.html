@@ -1,0 +1,220 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — Demande d'évènement{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'accueil' %}">Cockpit</a> &gt;
+<a href="#">Evènements</a> &gt;
+Nouvelle demande d'organisation
+{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+<li><a href="{% url 'projet_create' %}">Nouveau projet</a></li>
+<li><a href="{% url 'evenement_create' %}">Demander un évènement</a></li>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-form-card">
+    <h2>Demande d'organisation d'un évènement</h2>
+
+    {% if form.non_field_errors %}
+        <div class="cockpit-alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+    {% if form.create_by.errors %}
+        <div class="cockpit-alert">{{ form.create_by.errors }}</div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="cockpit-field">
+            <label for="{{ form.create_by.id_for_label }}">{{ form.create_by.label }}</label>
+            {{ form.create_by }}
+            <p class="cockpit-placeholder">{{ form.create_by.help_text }}</p>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.nom_event.id_for_label }}">{{ form.nom_event.label }}</label>
+            {{ form.nom_event }}
+        </div>
+
+        <!-- Date + heures sur la même ligne -->
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ form.date_event.id_for_label }}">{{ form.date_event.label }}</label>
+                {{ form.date_event }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.heure_debut.id_for_label }}">Heure début</label>
+                {{ form.heure_debut }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.heure_fin.id_for_label }}">Heure fin</label>
+                {{ form.heure_fin }}
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.projet.id_for_label }}">{{ form.projet.label }}</label>
+            {{ form.projet }}
+            <p class="cockpit-placeholder">Laisser vide si la demande n'est rattachée à aucun projet.</p>
+        </div>
+
+        <div class="cockpit-field">
+            <label class="cockpit-checkbox-field" for="{{ form.budget_prevu.id_for_label }}">
+                {{ form.budget_prevu }}
+                <span>{{ form.budget_prevu.label }}</span>
+            </label>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.type_event.id_for_label }}">{{ form.type_event.label }}</label>
+            {{ form.type_event }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.nb_participant.id_for_label }}">{{ form.nb_participant.label }}</label>
+            {{ form.nb_participant }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.espace.id_for_label }}">{{ form.espace.label }}</label>
+            {{ form.espace }}
+        </div>
+
+        <!-- Parking / Informatique / Sono / Logistique : 2 colonnes -->
+        <div class="cockpit-checkbox-grid">
+            <label class="cockpit-checkbox-field" for="{{ form.parking.id_for_label }}">
+                {{ form.parking }}
+                <span>{{ form.parking.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.informatique.id_for_label }}">
+                {{ form.informatique }}
+                <span>{{ form.informatique.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.sono.id_for_label }}">
+                {{ form.sono }}
+                <span>{{ form.sono.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.logistique_intervenant.id_for_label }}">
+                {{ form.logistique_intervenant }}
+                <span>{{ form.logistique_intervenant.label }}</span>
+            </label>
+        </div>
+
+        <!-- Expérimentation : le champ détail reste visible, non modifiable si décoché -->
+        <div class="cockpit-two-col-field">
+            <label class="cockpit-checkbox-field" for="{{ form.demo.id_for_label }}">
+                {{ form.demo }}
+                <span>{{ form.demo.label }}</span>
+            </label>
+            <div class="cockpit-field">
+                {{ form.demo_description }}
+                <p class="cockpit-placeholder">{{ form.demo_description.help_text }}</p>
+            </div>
+        </div>
+
+        <!-- Restauration : case + libellé à gauche, créneaux à droite -->
+        <div class="cockpit-two-col-field">
+            <label class="cockpit-checkbox-field" for="{{ form.restauration.id_for_label }}">
+                {{ form.restauration }}
+                <span>{{ form.restauration.label }}</span>
+            </label>
+            <div id="restauration-content">
+                {{ restauration_formset.management_form }}
+                <div id="restauration-rows">
+                    {% for repas_form in restauration_formset %}
+                    <div class="cockpit-eval-row">
+                        {{ repas_form.id }}
+                        {{ repas_form.type_repas }}
+                        {% if repas_form.instance.pk %}
+                        <label class="cockpit-eval-delete">
+                            {{ repas_form.DELETE }} Supprimer
+                        </label>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="cockpit-btn-secondary" id="add-restauration-row">+ Ajouter un créneau</button>
+
+                <div id="restauration-empty-form" style="display:none;">
+                    <div class="cockpit-eval-row">
+                        {{ restauration_formset.empty_form.type_repas }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.infos_complementaire.id_for_label }}">{{ form.infos_complementaire.label }}</label>
+            {{ form.infos_complementaire }}
+        </div>
+
+        <button type="submit" class="cockpit-btn">Soumettre la demande</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Expérimentation : le champ de détail reste visible mais devient
+    // non modifiable (grisé) tant que la case n'est pas cochée.
+    const demoCheckbox = document.getElementById('{{ form.demo.id_for_label }}');
+    const demoDescription = document.getElementById('{{ form.demo_description.id_for_label }}');
+    if (demoCheckbox && demoDescription) {
+        function toggleDemo() {
+            demoDescription.disabled = !demoCheckbox.checked;
+        }
+        demoCheckbox.addEventListener('change', toggleDemo);
+        toggleDemo();
+    }
+
+    // Restauration : même principe pour les créneaux (selects du formset)
+    // et le bouton d'ajout.
+    const restaurationCheckbox = document.getElementById('{{ form.restauration.id_for_label }}');
+    const restaurationRows = document.getElementById('restauration-rows');
+    const addRestaurationButton = document.getElementById('add-restauration-row');
+
+    function setRestaurationRowsDisabled(disabled) {
+        restaurationRows.querySelectorAll('select, input').forEach(function (el) {
+            el.disabled = disabled;
+        });
+    }
+
+    if (restaurationCheckbox && restaurationRows) {
+        function toggleRestauration() {
+            const disabled = !restaurationCheckbox.checked;
+            setRestaurationRowsDisabled(disabled);
+            if (addRestaurationButton) addRestaurationButton.disabled = disabled;
+        }
+        restaurationCheckbox.addEventListener('change', toggleRestauration);
+        toggleRestauration();
+    }
+
+    // Ajout dynamique de créneaux de restauration
+    const restaurationEmptyForm = document.getElementById('restauration-empty-form');
+    const restaurationTotalForms = document.querySelector('#id_restauration-TOTAL_FORMS');
+
+    if (addRestaurationButton && restaurationRows && restaurationEmptyForm && restaurationTotalForms) {
+        addRestaurationButton.addEventListener('click', function () {
+            const formIndex = parseInt(restaurationTotalForms.value, 10);
+            const newRowHtml = restaurationEmptyForm.innerHTML.replace(/__prefix__/g, formIndex);
+
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = newRowHtml;
+            const newRow = wrapper.firstElementChild;
+            restaurationRows.appendChild(newRow);
+
+            restaurationTotalForms.value = formIndex + 1;
+
+            // le nouveau créneau doit suivre l'état actuel de la case "Restauration"
+            newRow.querySelectorAll('select, input').forEach(function (el) {
+                el.disabled = !restaurationCheckbox.checked;
+            });
+        });
+    }
+</script>
+{% endblock %}
