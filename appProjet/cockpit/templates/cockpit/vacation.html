@@ -1,0 +1,283 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — Demande de vacation{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'accueil' %}">Cockpit</a> &gt; Demande de vacation{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+<li><a href="{% url 'projet_create' %}">Enregistrer un projet</a></li>
+<li><a href="{% url 'vacation_create' %}">Déclarer une vacation</a></li>
+<li><a href="{% url 'evenement_create' %}">Demander un évènement</a></li>
+{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'cockpit/css/tom-select.default.min.css' %}" rel="stylesheet">
+<script src="{% static 'cockpit/js/tom-select.complete.js' %}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-form-card">
+    <h2>Déclaration d'heures de vacation</h2>
+
+    {% if heure_form.non_field_errors %}
+        <div class="cockpit-alert">{{ heure_form.non_field_errors }}</div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ vacation_form.prenom.id_for_label }}">{{ vacation_form.prenom.label }}</label>
+                {{ vacation_form.prenom }}
+                <p class="cockpit-placeholder">Sera récupéré automatiquement via Azure AD une fois l'authentification en place.</p>
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ vacation_form.nom.id_for_label }}">{{ vacation_form.nom.label }}</label>
+                {{ vacation_form.nom }}
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ vacation_form.cours_selection.id_for_label }}">{{ vacation_form.cours_selection.label }}</label>
+            {{ vacation_form.cours_selection }}
+            <p class="cockpit-placeholder">
+                Renseignez d'abord votre prénom et nom : si vous avez déjà déclaré ce cours
+                (année en cours ou précédente), retrouvez-le dans la liste. Sinon, saisissez
+                simplement son intitulé pour en créer un nouveau.
+            </p>
+        </div>
+
+        <!-- Informations du cours : visibles dans tous les cas, mais désactivées
+             (lecture seule) si un cours existant a été sélectionné ci-dessus. -->
+        <div id="cours-details">
+            <div class="cockpit-field">
+                <label for="{{ vacation_form.organisme.id_for_label }}">{{ vacation_form.organisme.label }}</label>
+                {{ vacation_form.organisme }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ vacation_form.diplome.id_for_label }}">{{ vacation_form.diplome.label }}</label>
+                {{ vacation_form.diplome }}
+            </div>
+            <div class="cockpit-inline-group">
+                <div class="cockpit-field">
+                    <label for="{{ vacation_form.annee.id_for_label }}">{{ vacation_form.annee.label }}</label>
+                    {{ vacation_form.annee }}
+                    <p class="cockpit-placeholder">Année pendant laquelle le cours est dispensé (pas l'année universitaire).</p>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ vacation_form.lmd_universite.id_for_label }}">{{ vacation_form.lmd_universite.label }}</label>
+                    {{ vacation_form.lmd_universite }}
+                </div>
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ vacation_form.strat.id_for_label }}">{{ vacation_form.strat.label }}</label>
+                {{ vacation_form.strat }}
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ heure_form.date_cours.id_for_label }}">{{ heure_form.date_cours.label }}</label>
+                {{ heure_form.date_cours }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ heure_form.heure_debut.id_for_label }}">{{ heure_form.heure_debut.label }}</label>
+                {{ heure_form.heure_debut }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ heure_form.heure_fin.id_for_label }}">{{ heure_form.heure_fin.label }}</label>
+                {{ heure_form.heure_fin }}
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ heure_form.type_cours.id_for_label }}">{{ heure_form.type_cours.label }}</label>
+            {{ heure_form.type_cours }}
+            <p class="cockpit-placeholder">
+                Une ligne ne concerne qu'un seul type de cours. Si vous avez fait plusieurs
+                types (CM et TD par exemple) le même jour pour la même classe, déclarez-les
+                en plusieurs lignes distinctes.
+            </p>
+        </div>
+
+        <p class="cockpit-equiv-line" id="ligne-equivalent-td">
+            Pour cette ligne : 0,00 h réelle — 0,00 h équivalent TD
+        </p>
+
+        <div class="cockpit-total-td"
+             id="total-equivalent-td"
+             data-seuil-salarie="{{ seuil_salarie }}"
+             data-seuil-doctorant="{{ seuil_doctorant }}">
+            Total équivalent TD (avec cette ligne) : 0,00 h — seuil salarié 32h/an, seuil doctorant 64h/an
+        </div>
+
+        <button type="submit" class="cockpit-btn">Enregistrer</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const prenomInput = document.getElementById('{{ vacation_form.prenom.id_for_label }}');
+    const nomInput = document.getElementById('{{ vacation_form.nom.id_for_label }}');
+    const anneeInput = document.getElementById('{{ vacation_form.annee.id_for_label }}');
+    const organismeSelectEl = document.getElementById('{{ vacation_form.organisme.id_for_label }}');
+    const diplomeInput = document.getElementById('{{ vacation_form.diplome.id_for_label }}');
+    const niveauSelect = document.getElementById('{{ vacation_form.lmd_universite.id_for_label }}');
+    const stratSelect = document.getElementById('{{ vacation_form.strat.id_for_label }}');
+
+    const heureDebutInput = document.getElementById('{{ heure_form.heure_debut.id_for_label }}');
+    const heureFinInput = document.getElementById('{{ heure_form.heure_fin.id_for_label }}');
+    const typeCoursSelect = document.getElementById('{{ heure_form.type_cours.id_for_label }}');
+
+    const ligneEquivalentEl = document.getElementById('ligne-equivalent-td');
+    const totalEl = document.getElementById('total-equivalent-td');
+    const seuilSalarie = parseFloat(totalEl.dataset.seuilSalarie);
+    const seuilDoctorant = parseFloat(totalEl.dataset.seuilDoctorant);
+
+    let totalServeur = 0;
+    let rafraichirTotalTimeout = null;
+
+    // Tom Select : organisme (recherche parmi les entités existantes)
+    const organismeSelect = new TomSelect(organismeSelectEl, {
+        valueField: "id",
+        labelField: "nom",
+        searchField: "nom",
+        create: false,
+        load: function (query, callback) {
+            fetch(`/api/entite/recherche/?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => callback(data))
+                .catch(() => callback());
+        },
+    });
+
+    // Tom Select : intitulé du cours (recherche parmi les cours déjà
+    // déclarés par l'utilisateur, ou création d'un nouvel intitulé)
+    const coursSelect = new TomSelect('#{{ vacation_form.cours_selection.id_for_label }}', {
+        valueField: "id",
+        labelField: "intitule",
+        searchField: "intitule",
+        create: function (input) {
+            return { id: 'new:' + input, intitule: input };
+        },
+        createOnBlur: true,
+        persist: false,
+        load: function (query, callback) {
+            const prenom = (prenomInput.value || '').trim();
+            const nom = (nomInput.value || '').trim();
+            if (!prenom || !nom) { callback(); return; }
+            fetch(`/api/vacation/recherche/?q=${encodeURIComponent(query)}&prenom=${encodeURIComponent(prenom)}&nom=${encodeURIComponent(nom)}`)
+                .then(res => res.json())
+                .then(data => callback(data))
+                .catch(() => callback());
+        },
+        onChange: function (value) {
+            if (!value || value.indexOf('new:') === 0) {
+                activerChampsCours(true);
+                return;
+            }
+            const option = coursSelect.options[value];
+            if (!option) { return; }
+
+            if (option.entite_id) {
+                organismeSelect.addOption({ id: option.entite_id, nom: option.entite_nom });
+                organismeSelect.setValue(option.entite_id);
+            } else {
+                organismeSelect.clear();
+            }
+            diplomeInput.value = option.diplome || '';
+            anneeInput.value = option.annee || '';
+            niveauSelect.value = option.lmd_universite || '';
+            stratSelect.value = option.strat_id || '';
+
+            activerChampsCours(false);
+            rafraichirTotal();
+        },
+    });
+
+    function activerChampsCours(actif) {
+        actif ? organismeSelect.enable() : organismeSelect.disable();
+        diplomeInput.disabled = !actif;
+        anneeInput.disabled = !actif;
+        niveauSelect.disabled = !actif;
+        stratSelect.disabled = !actif;
+    }
+
+    // Calcul en direct : heures réelles + équivalent TD de la ligne en cours de saisie
+    function calculerLigne() {
+        const debut = heureDebutInput.value;
+        const fin = heureFinInput.value;
+        const type = typeCoursSelect.value;
+        if (!debut || !fin) { return { heures: 0, equivalent: 0 }; }
+
+        const [hd, md] = debut.split(':').map(Number);
+        const [hf, mf] = fin.split(':').map(Number);
+        const minutes = (hf * 60 + mf) - (hd * 60 + md);
+        if (minutes <= 0) { return { heures: 0, equivalent: 0 }; }
+
+        const heures = minutes / 60;
+        const facteurs = { CM: 1.5, TD: 1, TP: 0.75 };
+        const facteur = facteurs[type] !== undefined ? facteurs[type] : 1;
+        return { heures: heures, equivalent: type ? heures * facteur : 0 };
+    }
+
+    function majAffichage() {
+        const ligne = calculerLigne();
+        ligneEquivalentEl.textContent =
+            `Pour cette ligne : ${ligne.heures.toFixed(2)} h réelle — ${ligne.equivalent.toFixed(2)} h équivalent TD`;
+
+        const total = totalServeur + ligne.equivalent;
+        totalEl.textContent =
+            `Total équivalent TD (avec cette ligne) : ${total.toFixed(2)} h — ` +
+            `seuil salarié ${seuilSalarie}h/an, seuil doctorant ${seuilDoctorant}h/an`;
+
+        totalEl.classList.remove('is-warning', 'is-danger');
+        if (total >= seuilDoctorant) {
+            totalEl.classList.add('is-danger');
+        } else if (total >= seuilSalarie) {
+            totalEl.classList.add('is-warning');
+        }
+    }
+
+    function rafraichirTotal() {
+        const prenom = (prenomInput.value || '').trim();
+        const nom = (nomInput.value || '').trim();
+        const annee = (anneeInput.value || '').trim();
+        if (!prenom || !nom || !annee) {
+            totalServeur = 0;
+            majAffichage();
+            return;
+        }
+        fetch(`/api/vacation/total-equivalent-td/?prenom=${encodeURIComponent(prenom)}&nom=${encodeURIComponent(nom)}&annee=${encodeURIComponent(annee)}`)
+            .then(res => res.json())
+            .then(data => {
+                totalServeur = data.total || 0;
+                majAffichage();
+            })
+            .catch(() => {});
+    }
+
+    function rafraichirTotalDiffere() {
+        clearTimeout(rafraichirTotalTimeout);
+        rafraichirTotalTimeout = setTimeout(rafraichirTotal, 400);
+    }
+
+    [prenomInput, nomInput, anneeInput].forEach(function (el) {
+        el.addEventListener('input', rafraichirTotalDiffere);
+        el.addEventListener('change', rafraichirTotalDiffere);
+    });
+    [heureDebutInput, heureFinInput, typeCoursSelect].forEach(function (el) {
+        el.addEventListener('input', majAffichage);
+        el.addEventListener('change', majAffichage);
+    });
+
+    majAffichage();
+</script>
+{% endblock %}

@@ -10,4 +10,7 @@ urlpatterns = [
     path('success/', views.success_view, name='success'),
     path('api/entite/recherche/', views.entites_recherche_view, name='entite_recherche'),
     path('evenement/nouveau/', views.evenement_create_view, name='evenement_create'),
+    path('vacation/nouveau/', views.vacation_create_view, name='vacation_create'),
+    path('api/vacation/recherche/', views.vacation_recherche_view, name='vacation_recherche'),
+    path('api/vacation/total-equivalent-td/', views.vacation_total_view, name='vacation_total'),
 ]

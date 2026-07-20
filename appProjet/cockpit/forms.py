@@ -1,5 +1,8 @@
 import os
 
+from decimal import Decimal
+from datetime import date, datetime, time
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import modelformset_factory
@@ -9,6 +12,7 @@ from .models import (
     DescriptionScientifique, Equipe,
     Domaine, DomaineProjet, Echeance, Responsable, Partenaire,
     InformationsCadrage, DemandeEvent, Event, Restauration,
+    Vacation, HeureVacation,
 )
 
 MAX_FILE_SIZE_MB = 25
@@ -815,3 +819,167 @@ def save_partenaire_formset(formset, projet):
         instance.save()
     for obj in formset.deleted_objects:
         obj.delete()
+
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+# Vacations : demande de déclaration d'heures d'enseignement
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+# Un même "cours" (table vacation) ne doit être enregistré qu'une seule
+# fois : chaque déclaration d'heures (table heure_vacation) vient s'y
+# rattacher, qu'il s'agisse du tout premier cours créé ou d'un cours déjà
+# existant retrouvé via la recherche "Intitulé". Cf VACATION_NOUVEAU_PREFIX
+# et VacationForm.build_instance() plus bas.
+ 
+# Valeur conventionnelle utilisée par Tom Select (callback "create") quand
+# l'utilisateur ne retrouve pas son cours et en saisit un nouveau intitulé :
+# reprend la même logique que ENTITE_AUTRE_VALUE plus haut, mais ici la
+# valeur porte directement le texte saisi (il n'y a pas de choix fermé
+# possible pour un intitulé de cours).
+VACATION_NOUVEAU_PREFIX = "new:"
+ 
+# Liste en dur (règle métier), pas de table dédiée : L1 à D3.
+NIVEAU_CHOICES = [
+    ('', '---------'),
+    ('L1', 'Licence 1 (L1)'),
+    ('L2', 'Licence 2 (L2)'),
+    ('L3', 'Licence 3 (L3)'),
+    ('M1', 'Master 1 (M1)'),
+    ('M2', 'Master 2 (M2)'),
+    ('D1', 'Doctorat 1ère année (D1)'),
+    ('D2', 'Doctorat 2ème année (D2)'),
+    ('D3', 'Doctorat 3ème année (D3)'),
+]
+ 
+# Coefficients "équivalent TD" (repris de la formule tableur fournie :
+# TD + CM*1,5 + TP*0,75).
+EQUIVALENT_TD_FACTORS = {
+    'CM': Decimal('1.5'),
+    'TD': Decimal('1'),
+    'TP': Decimal('0.75'),
+}
+ 
+# Plafonds annuels (en heures équivalent TD) : au-delà, une alerte est
+# affichée. Le statut de l'utilisateur (salarié / doctorant) n'étant pas
+# encore géré (pas d'Azure AD), les deux seuils sont affichés à titre
+# informatif pour l'instant.
+SEUIL_EQUIVALENT_TD_SALARIE = Decimal('32')
+SEUIL_EQUIVALENT_TD_DOCTORANT = Decimal('64')
+ 
+ 
+def calculer_equivalent_td(nb_heure, type_cours):
+    """Convertit un nombre d'heures d'un type de cours donné en équivalent TD."""
+    if not nb_heure or not type_cours:
+        return Decimal('0')
+    facteur = EQUIVALENT_TD_FACTORS.get(type_cours, Decimal('1'))
+    return (Decimal(nb_heure) * facteur).quantize(Decimal('0.01'))
+ 
+ 
+class VacationForm(forms.ModelForm):
+    """
+    Informations du cours (table vacation). Ne sert que lors de la création
+    d'un nouveau cours (cf VacationForm.build_instance) : si l'utilisateur
+    choisit un cours déjà existant via la recherche "Intitulé", ces champs
+    sont ignorés côté serveur et l'instance existante est réutilisée telle
+    quelle, pour ne jamais dupliquer une ligne "vacation".
+    """
+    organisme = forms.ModelChoiceField(
+        queryset=Entite.objects.none(), required=False, label="Organisme",
+        widget=forms.Select(attrs={'id': 'id_organisme'}),
+    )
+    lmd_universite = forms.ChoiceField(
+        choices=NIVEAU_CHOICES, required=False, label="Niveau",
+    )
+    strat = forms.ModelChoiceField(
+        queryset=ProgStrategique.objects.none(), required=False, label="Programme R&D",
+    )
+    # Valeur brute envoyée par Tom Select : soit l'id d'un cours (Vacation)
+    # déjà existant, soit VACATION_NOUVEAU_PREFIX + le nouvel intitulé saisi
+    # (cf callback "create" côté JS). Résolu dans la vue, pas ici : un
+    # ModelChoiceField classique ne saurait pas gérer le cas "nouveau".
+    cours_selection = forms.CharField(
+        required=False,
+        widget=forms.Select(choices=[('', '---------')], attrs={'id': 'id_cours_selection'}),
+        label="Intitulé du cours",
+    )
+ 
+    class Meta:
+        model = Vacation
+        fields = ['nom', 'prenom', 'diplome', 'annee', 'lmd_universite', 'strat']
+        labels = {
+            'nom': "Nom",
+            'prenom': "Prénom",
+            'diplome': "Diplôme préparé",
+            'annee': "Année",
+        }
+        widgets = {
+            'annee': forms.NumberInput(attrs={'step': '1', 'min': '2000'}),
+        }
+ 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.required = False
+        self.fields['organisme'].queryset = Entite.objects.all().order_by('nom')
+        self.fields['strat'].queryset = ProgStrategique.objects.filter(
+            strat_archive=False
+        ).order_by('nom_strat')
+        if not self.fields['annee'].initial:
+            self.fields['annee'].initial = date.today().year
+ 
+    def build_instance(self, intitule):
+        """Construit (sans l'enregistrer) une nouvelle instance Vacation."""
+        vacation = super().save(commit=False)
+        vacation.intitule = intitule
+        vacation.entite = self.cleaned_data.get('organisme')
+        return vacation
+ 
+ 
+class HeureVacationForm(forms.ModelForm):
+    """
+    Une ligne = un seul type de cours (CM, TD ou TP) : si l'utilisateur a
+    fait plusieurs types le même jour pour la même classe, il doit saisir
+    une ligne par type (cf message d'avertissement dans le template).
+    nb_heure n'est pas un champ saisi directement : il est recalculé côté
+    serveur à partir de heure_debut/heure_fin (cf clean()), pour garantir
+    une valeur fiable même si le JS de prévisualisation est désactivé.
+    """
+    class Meta:
+        model = HeureVacation
+        fields = ['date_cours', 'heure_debut', 'heure_fin', 'type_cours']
+        widgets = {
+            'date_cours': forms.DateInput(attrs={'type': 'date'}),
+            'heure_debut': forms.TimeInput(attrs={'type': 'time'}),
+            'heure_fin': forms.TimeInput(attrs={'type': 'time'}),
+        }
+        labels = {
+            'date_cours': "Date du cours",
+            'heure_debut': "Heure de début",
+            'heure_fin': "Heure de fin",
+            'type_cours': "Type de cours",
+        }
+ 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.required = False
+ 
+    def clean(self):
+        cleaned_data = super().clean()
+        debut = cleaned_data.get('heure_debut')
+        fin = cleaned_data.get('heure_fin')
+        if debut and fin:
+            if fin <= debut:
+                raise ValidationError(
+                    "L'heure de fin doit être postérieure à l'heure de début."
+                )
+            duree = datetime.combine(date.today(), fin) - datetime.combine(date.today(), debut)
+            cleaned_data['nb_heure'] = Decimal(
+                duree.total_seconds() / 3600
+            ).quantize(Decimal('0.01'))
+        return cleaned_data
+ 
+    def save(self, commit=True):
+        heure = super().save(commit=False)
+        heure.nb_heure = self.cleaned_data.get('nb_heure')
+        if commit:
+            heure.save()
+        return heure

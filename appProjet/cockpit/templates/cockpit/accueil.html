@@ -10,7 +10,7 @@
 
 {% block content %}
 <div class="cockpit-grid">
-    <a href="#" class="cockpit-tile cockpit-tile--public">Demande de vacation</a>
+    <a href="{% url 'vacation_create' %}" class="cockpit-tile cockpit-tile--public">Demande de vacation</a>
     <a href="{% url 'contact_create' %}" class="cockpit-tile cockpit-tile--public">Créer un nouveau contact</a>
     <a href="{% url 'evenement_create' %}" class="cockpit-tile cockpit-tile--public">Demander l'organisation d'un évènement</a>
 

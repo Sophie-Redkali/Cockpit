@@ -2,10 +2,12 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q
+from decimal import Decimal
+from datetime import date as date_cls
 
 from django.http import JsonResponse
 
-from .models import Entite, DocumentSharepoint, Projet, Event, Contact
+from .models import Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation
 from .forms import (
     ContactForm, EntiteMiniForm, ProjetForm, tabs_visibles_pour,
     get_benefice_formsets, save_benefice_formsets,
@@ -14,6 +16,8 @@ from .forms import (
     InformationsCadrageForm, save_informations_cadrage,
     get_partenaire_formset, save_partenaire_formset,
     EvenementForm, get_restauration_formset, save_restauration_formset,
+    VacationForm, HeureVacationForm, VACATION_NOUVEAU_PREFIX,
+    calculer_equivalent_td, SEUIL_EQUIVALENT_TD_SALARIE, SEUIL_EQUIVALENT_TD_DOCTORANT,
 )
 
 # Statuts à partir desquels les jalons (kickoff/mi-parcours/final) et les
@@ -269,3 +273,127 @@ def evenement_create_view(request):
         "form": form,
         "restauration_formset": restauration_formset,
     })
+
+# ---------------------------------------------------------------------------
+# Vacations : déclaration d'heures d'enseignement
+# ---------------------------------------------------------------------------
+def _calculer_total_equivalent_td(prenom, nom, annee):
+    """
+    Total "équivalent TD" déjà enregistré pour un utilisateur (identifié
+    pour l'instant par prénom + nom, en l'absence d'authentification Azure
+    AD) sur une année de cours donnée.
+    """
+    if not (prenom and nom and annee):
+        return Decimal('0')
+ 
+    heures = HeureVacation.objects.filter(
+        vacation__prenom__iexact=prenom,
+        vacation__nom__iexact=nom,
+        vacation__annee=annee,
+    ).values_list('nb_heure', 'type_cours')
+ 
+    total = Decimal('0')
+    for nb_heure, type_cours in heures:
+        total += calculer_equivalent_td(nb_heure, type_cours)
+    return total
+ 
+ 
+def vacation_create_view(request):
+    if request.method == "POST":
+        heure_form = HeureVacationForm(request.POST)
+        vacation_form = VacationForm(request.POST)
+        cours_selection = (request.POST.get("cours_selection") or "").strip()
+ 
+        if heure_form.is_valid():
+            vacation = None
+            erreur_cours = None
+ 
+            if not cours_selection:
+                erreur_cours = "Merci de sélectionner un cours existant ou d'en créer un nouveau dans « Intitulé »."
+            elif cours_selection.startswith(VACATION_NOUVEAU_PREFIX):
+                intitule = cours_selection[len(VACATION_NOUVEAU_PREFIX):].strip()
+                if not intitule:
+                    erreur_cours = "L'intitulé du cours est obligatoire pour créer un nouveau cours."
+                elif vacation_form.is_valid():
+                    vacation = vacation_form.build_instance(intitule)
+                    vacation.save()
+                else:
+                    erreur_cours = "Merci de vérifier les informations du nouveau cours."
+            else:
+                try:
+                    vacation = Vacation.objects.get(pk=cours_selection)
+                except (Vacation.DoesNotExist, ValueError):
+                    erreur_cours = "Le cours sélectionné est introuvable."
+ 
+            if erreur_cours:
+                heure_form.add_error(None, erreur_cours)
+            else:
+                heure = heure_form.save(commit=False)
+                heure.vacation = vacation
+                heure.save()
+                return redirect("success")
+    else:
+        heure_form = HeureVacationForm()
+        vacation_form = VacationForm()
+ 
+    return render(request, "cockpit/vacation.html", {
+        "heure_form": heure_form,
+        "vacation_form": vacation_form,
+        "seuil_salarie": SEUIL_EQUIVALENT_TD_SALARIE,
+        "seuil_doctorant": SEUIL_EQUIVALENT_TD_DOCTORANT,
+    })
+ 
+ 
+def vacation_recherche_view(request):
+    """
+    Recherche AJAX (Tom Select) des cours déjà déclarés par l'utilisateur
+    (prénom + nom saisis dans le formulaire), sur l'année en cours et
+    l'année précédente. Renvoie de quoi pré-remplir automatiquement le
+    reste du formulaire si l'utilisateur en choisit un.
+    """
+    q = request.GET.get("q", "")
+    prenom = request.GET.get("prenom", "")
+    nom = request.GET.get("nom", "")
+ 
+    if not (prenom and nom):
+        return JsonResponse([], safe=False)
+ 
+    annee_courante = date_cls.today().year
+    qs = Vacation.objects.filter(
+        prenom__iexact=prenom,
+        nom__iexact=nom,
+        annee__in=[annee_courante, annee_courante - 1],
+    )
+    if q:
+        qs = qs.filter(intitule__icontains=q)
+    qs = qs.select_related('entite', 'strat').order_by('-annee', 'intitule')[:20]
+ 
+    data = [{
+        "id": v.vacation_id,
+        "intitule": v.intitule,
+        "entite_id": v.entite_id,
+        "entite_nom": v.entite.nom if v.entite else "",
+        "diplome": v.diplome or "",
+        "annee": v.annee,
+        "lmd_universite": v.lmd_universite or "",
+        "strat_id": v.strat_id,
+    } for v in qs]
+    return JsonResponse(data, safe=False)
+ 
+ 
+def vacation_total_view(request):
+    """Endpoint AJAX : total équivalent TD déjà enregistré pour prénom/nom/année."""
+    prenom = request.GET.get("prenom", "")
+    nom = request.GET.get("nom", "")
+    try:
+        annee = int(request.GET.get("annee", ""))
+    except (TypeError, ValueError):
+        annee = None
+ 
+    total = _calculer_total_equivalent_td(prenom, nom, annee)
+    return JsonResponse({
+        "total": float(total),
+        "seuil_salarie": float(SEUIL_EQUIVALENT_TD_SALARIE),
+        "seuil_doctorant": float(SEUIL_EQUIVALENT_TD_DOCTORANT),
+    })
+ 
