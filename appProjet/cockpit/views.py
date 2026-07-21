@@ -1,13 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
-from django.db.models import Q
+from django.db.models import Q, ProtectedError
 from decimal import Decimal
 from datetime import date as date_cls
 
 from django.http import JsonResponse
 
-from .models import Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation
+from .models import Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation, ProgStrategique, Domaine, DomaineProjet
 from .forms import (
     ContactForm, EntiteMiniForm, ProjetForm, tabs_visibles_pour,
     get_benefice_formsets, save_benefice_formsets,
@@ -18,6 +19,7 @@ from .forms import (
     EvenementForm, get_restauration_formset, save_restauration_formset,
     VacationForm, HeureVacationForm, VACATION_NOUVEAU_PREFIX,
     calculer_equivalent_td, SEUIL_EQUIVALENT_TD_SALARIE, SEUIL_EQUIVALENT_TD_DOCTORANT,
+    ProgStrategiqueForm, DomaineForm,
 )
 
 # Statuts à partir desquels les jalons (kickoff/mi-parcours/final) et les
@@ -396,4 +398,86 @@ def vacation_total_view(request):
         "seuil_salarie": float(SEUIL_EQUIVALENT_TD_SALARIE),
         "seuil_doctorant": float(SEUIL_EQUIVALENT_TD_DOCTORANT),
     })
- 
+
+# ---------------------------------------------------------------------------
+# Gestion des référentiels : programmes stratégiques & domaines
+# Page réservée à un nombre restreint de personnes (staff pour l'instant,
+# à remplacer par un contrôle sur les groupes Azure AD une fois disponible)
+# ---------------------------------------------------------------------------
+#@staff_member_required
+def gestion_referentiels_view(request):
+    prog_form = ProgStrategiqueForm()
+    domaine_form = DomaineForm()
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        # --- Programmes stratégiques ---
+        if action == "create_strat":
+            prog_form = ProgStrategiqueForm(request.POST)
+            if prog_form.is_valid():
+                prog_form.save()
+                messages.success(request, "Programme stratégique créé.")
+                return redirect("gestion_referentiels")
+
+        elif action == "toggle_strat":
+            strat = get_object_or_404(ProgStrategique, pk=request.POST.get("strat_id"))
+            strat.strat_archive = not strat.strat_archive
+            strat.save(update_fields=["strat_archive"])
+            return redirect("gestion_referentiels")
+
+        elif action == "delete_strat":
+            strat = get_object_or_404(ProgStrategique, pk=request.POST.get("strat_id"))
+            try:
+                nom = strat.nom_strat
+                strat.delete()
+                messages.success(request, f"Programme stratégique « {nom} » supprimé.")
+            except ProtectedError:
+                messages.error(
+                    request,
+                    f"Impossible de supprimer « {strat.nom_strat} » : il est encore utilisé "
+                    "par au moins un projet ou une vacation."
+                )
+            return redirect("gestion_referentiels")
+
+        # --- Domaines ---
+        elif action == "create_domaine":
+            domaine_form = DomaineForm(request.POST)
+            if domaine_form.is_valid():
+                domaine_form.save()
+                messages.success(request, "Domaine créé.")
+                return redirect("gestion_referentiels")
+
+        elif action == "toggle_domaine":
+            domaine = get_object_or_404(Domaine, pk=request.POST.get("domaine_id"))
+            domaine.domaine_archive = not domaine.domaine_archive
+            domaine.save(update_fields=["domaine_archive"])
+            return redirect("gestion_referentiels")
+
+        elif action == "delete_domaine":
+            domaine = get_object_or_404(Domaine, pk=request.POST.get("domaine_id"))
+            if DomaineProjet.objects.filter(domaine=domaine).exists():
+                messages.error(
+                    request,
+                    f"Impossible de supprimer « {domaine.nom_domaine} » : il est encore "
+                    "rattaché à au moins un projet."
+                )
+            else:
+                nom = domaine.nom_domaine
+                domaine.delete()
+                messages.success(request, f"Domaine « {nom} » supprimé.")
+            return redirect("gestion_referentiels")
+
+    progs_actifs = ProgStrategique.objects.filter(strat_archive=False).order_by("nom_strat")
+    progs_archives = ProgStrategique.objects.filter(strat_archive=True).order_by("nom_strat")
+    domaines_actifs = Domaine.objects.filter(domaine_archive=False).order_by("num_domaine", "nom_domaine")
+    domaines_archives = Domaine.objects.filter(domaine_archive=True).order_by("num_domaine", "nom_domaine")
+
+    return render(request, "cockpit/gestion_referentiels.html", {
+        "prog_form": prog_form,
+        "domaine_form": domaine_form,
+        "progs_actifs": progs_actifs,
+        "progs_archives": progs_archives,
+        "domaines_actifs": domaines_actifs,
+        "domaines_archives": domaines_archives,
+    })

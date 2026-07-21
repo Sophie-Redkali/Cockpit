@@ -13,4 +13,5 @@ urlpatterns = [
     path('vacation/nouveau/', views.vacation_create_view, name='vacation_create'),
     path('api/vacation/recherche/', views.vacation_recherche_view, name='vacation_recherche'),
     path('api/vacation/total-equivalent-td/', views.vacation_total_view, name='vacation_total'),
+    path('referentiels/', views.gestion_referentiels_view, name='gestion_referentiels'),
 ]

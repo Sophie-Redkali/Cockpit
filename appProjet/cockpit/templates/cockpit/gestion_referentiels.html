@@ -1,0 +1,140 @@
+{% extends "cockpit/base.html" %}
+
+{% block title %}Cockpit — Référentiels{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'accueil' %}">Cockpit</a> &gt; Référentiels{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'gestion_referentiels' %}">Référentiels</a></li>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}cockpit-alert{% else %}cockpit-success{% endif %}">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="cockpit-form-card" style="margin-bottom: 1.5rem;">
+    <h2>Programmes stratégiques</h2>
+
+    <div class="cockpit-eval-section">
+        <h3>Actifs</h3>
+        {% for strat in progs_actifs %}
+        <div class="cockpit-eval-row">
+            <span style="flex:1;">{{ strat.nom_strat }}</span>
+            <form method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="strat_id" value="{{ strat.pk }}">
+                <button type="submit" name="action" value="toggle_strat" class="cockpit-btn-secondary">Archiver</button>
+            </form>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement ce programme ?');">
+                {% csrf_token %}
+                <input type="hidden" name="strat_id" value="{{ strat.pk }}">
+                <button type="submit" name="action" value="delete_strat" class="cockpit-btn-secondary">Supprimer</button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="cockpit-placeholder">Aucun programme actif.</p>
+        {% endfor %}
+    </div>
+
+    <div class="cockpit-eval-section">
+        <h3>Archivés</h3>
+        {% for strat in progs_archives %}
+        <div class="cockpit-eval-row">
+            <span style="flex:1; color: var(--color-gray-medium);">{{ strat.nom_strat }}</span>
+            <form method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="strat_id" value="{{ strat.pk }}">
+                <button type="submit" name="action" value="toggle_strat" class="cockpit-btn-secondary">Désarchiver</button>
+            </form>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement ce programme ?');">
+                {% csrf_token %}
+                <input type="hidden" name="strat_id" value="{{ strat.pk }}">
+                <button type="submit" name="action" value="delete_strat" class="cockpit-btn-secondary">Supprimer</button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="cockpit-placeholder">Aucun programme archivé.</p>
+        {% endfor %}
+    </div>
+
+    <form method="post" class="cockpit-inline-group" style="align-items:flex-end;">
+        {% csrf_token %}
+        <div class="cockpit-field" style="flex:1;">
+            <label for="{{ prog_form.nom_strat.id_for_label }}">Nouveau programme stratégique</label>
+            {{ prog_form.nom_strat }}
+        </div>
+        <button type="submit" name="action" value="create_strat" class="cockpit-btn">Ajouter</button>
+    </form>
+</div>
+
+<div class="cockpit-form-card">
+    <h2>Domaines</h2>
+
+    <div class="cockpit-eval-section">
+        <h3>Actifs</h3>
+        {% for domaine in domaines_actifs %}
+        <div class="cockpit-eval-row">
+            <span style="flex:1;">Domaine {{ domaine.num_domaine }} — {{ domaine.nom_domaine }}</span>
+            <form method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="domaine_id" value="{{ domaine.pk }}">
+                <button type="submit" name="action" value="toggle_domaine" class="cockpit-btn-secondary">Archiver</button>
+            </form>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement ce domaine ?');">
+                {% csrf_token %}
+                <input type="hidden" name="domaine_id" value="{{ domaine.pk }}">
+                <button type="submit" name="action" value="delete_domaine" class="cockpit-btn-secondary">Supprimer</button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="cockpit-placeholder">Aucun domaine actif.</p>
+        {% endfor %}
+    </div>
+
+    <div class="cockpit-eval-section">
+        <h3>Archivés</h3>
+        {% for domaine in domaines_archives %}
+        <div class="cockpit-eval-row">
+            <span style="flex:1; color: var(--color-gray-medium);">{{ domaine.nom_domaine }}</span>
+            <form method="post" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="domaine_id" value="{{ domaine.pk }}">
+                <button type="submit" name="action" value="toggle_domaine" class="cockpit-btn-secondary">Désarchiver</button>
+            </form>
+            <form method="post" style="display:inline;"
+                  onsubmit="return confirm('Supprimer définitivement ce domaine ?');">
+                {% csrf_token %}
+                <input type="hidden" name="domaine_id" value="{{ domaine.pk }}">
+                <button type="submit" name="action" value="delete_domaine" class="cockpit-btn-secondary">Supprimer</button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="cockpit-placeholder">Aucun domaine archivé.</p>
+        {% endfor %}
+    </div>
+
+    <form method="post" class="cockpit-inline-group" style="align-items:flex-end;">
+        {% csrf_token %}
+        <div class="cockpit-field" style="flex:2;">
+            <label for="{{ domaine_form.nom_domaine.id_for_label }}">Nouveau domaine</label>
+            {{ domaine_form.nom_domaine }}
+        </div>
+        <div class="cockpit-field" style="flex:1;">
+            <label for="{{ domaine_form.num_domaine.id_for_label }}">{{ domaine_form.num_domaine.label }}</label>
+            {{ domaine_form.num_domaine }}
+        </div>
+        <button type="submit" name="action" value="create_domaine" class="cockpit-btn">Ajouter</button>
+    </form>
+</div>
+
+{% endblock %}

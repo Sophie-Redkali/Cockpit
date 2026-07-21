@@ -12,7 +12,7 @@ from .models import (
     DescriptionScientifique, Equipe,
     Domaine, DomaineProjet, Echeance, Responsable, Partenaire,
     InformationsCadrage, DemandeEvent, Event, Restauration,
-    Vacation, HeureVacation,
+    Vacation, HeureVacation, ProgStrategique, Domaine
 )
 
 MAX_FILE_SIZE_MB = 25
@@ -983,3 +983,31 @@ class HeureVacationForm(forms.ModelForm):
         if commit:
             heure.save()
         return heure
+
+ # -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+ # Ajout et archivage de programme stratégique et de domaine
+ # -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-   
+class ProgStrategiqueForm(forms.ModelForm):
+    class Meta:
+        model = ProgStrategique
+        fields = ['nom_strat']
+        labels = {'nom_strat': "Nom du programme stratégique"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['nom_strat'].required = True
+
+
+class DomaineForm(forms.ModelForm):
+    class Meta:
+        model = Domaine
+        fields = ['num_domaine', 'nom_domaine']
+        labels = {
+            'num_domaine': "Numéro du domaine",
+            'nom_domaine': "Nom du domaine",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['nom_domaine'].required = True
+        self.fields['num_domaine'].required = True
