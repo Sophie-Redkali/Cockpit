@@ -420,6 +420,7 @@ CREATE TABLE crm.ACTION (
 	date_action DATE,
 	-- statut action : prévu, réalisé, annulé, en cours, autre
 	statut_action VARCHAR(50),
+	objectif_changement_statut VARCHAR(50),
 	create_by VARCHAR(150), -- UPN Azure AD via PowerApps (displayName)
 	create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	update_at TIMESTAMP,
@@ -435,6 +436,42 @@ CREATE TABLE crm.COMMENT_CRM (
 	commentaire_crm VARCHAR(250),
 	create_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	update_at TIMESTAMP
+);
+
+-- ======================================
+-- Pour le suivi du statut KANBAN d'un contact par projet
+-- Le statut général d'un contact reste géré au niveau de sa fiche
+-- ======================================
+CREATE TABLE projet_mgmt.contact_projet (
+    contact_projet_id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    contact_id INT NOT NULL REFERENCES crm.contact(contact_id) ON DELETE CASCADE,
+    projet_id INT NOT NULL REFERENCES projet_mgmt.projet(projet_id) ON DELETE CASCADE,
+    -- affichage courant, mis a jour a chaque changement (source de verite = historique ci-dessous)
+    statut_kanban VARCHAR(50),
+    create_at TIMESTAMP NOT NULL DEFAULT now(),
+    update_at TIMESTAMP,
+    CONSTRAINT uq_contact_projet UNIQUE (contact_id, projet_id)
+);
+
+CREATE TABLE projet_mgmt.historique_statut_contact_projet (
+    historique_id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    contact_projet_id INT NOT NULL REFERENCES projet_mgmt.contact_projet(contact_projet_id) ON DELETE CASCADE,
+    statut_atteint VARCHAR(50) NOT NULL,
+    create_at TIMESTAMP NOT NULL DEFAULT now(),
+    create_by VARCHAR(150)
+);
+
+-- =============================================================================
+-- Historique du statut institutionnel d'une entite (partenaire / membre / fondateur)
+-- entite.statut_entite reste l'affichage courant (deja existant), comme
+-- projet.statut_actuel vis-a-vis de projet_mgmt.validation
+-- =============================================================================
+CREATE TABLE crm.historique_statut_entite (
+    historique_id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    entite_id INT NOT NULL REFERENCES crm.entite(entite_id) ON DELETE CASCADE,
+    statut_atteint VARCHAR(50) NOT NULL,
+    create_at TIMESTAMP NOT NULL DEFAULT now(),
+    create_by VARCHAR(150)
 );
 
 -- ======================================

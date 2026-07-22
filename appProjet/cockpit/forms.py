@@ -12,7 +12,8 @@ from .models import (
     DescriptionScientifique, Equipe,
     Domaine, DomaineProjet, Echeance, Responsable, Partenaire,
     InformationsCadrage, DemandeEvent, Event, Restauration,
-    Vacation, HeureVacation, ProgStrategique, Domaine
+    Vacation, HeureVacation, ProgStrategique, Domaine,
+    ContactProjet, HistoriqueStatutContactProjet, HistoriqueStatutEntite, Action,
 )
 
 MAX_FILE_SIZE_MB = 25
@@ -1011,3 +1012,157 @@ class DomaineForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields['nom_domaine'].required = True
         self.fields['num_domaine'].required = True
+    
+    def clean_num_domaine(self):
+        num = self.cleaned_data.get('num_domaine')
+        if num is None:
+            return num
+
+        # on ne vérifie l'unicité que parmi les domaines ACTIFS : un numéro
+        # peut être réutilisé une fois l'ancien domaine archivé, sans
+        # jamais changer la référence des projets déjà rattachés à
+        # l'ancien domaine (la liaison se fait par domaine_id, pas par numéro)
+        conflit = Domaine.objects.filter(num_domaine=num, domaine_archive=False)
+        if self.instance.pk:
+            conflit = conflit.exclude(pk=self.instance.pk)
+
+        if conflit.exists():
+            existant = conflit.first()
+            raise ValidationError(
+                f"Le numéro {num} est déjà utilisé par le domaine actif « {existant.nom_domaine} »."
+            )
+        return num
+
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+# CRM : statuts kanban par projet, et statut institutionnel de l'entite
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+# Ces formulaires/fonctions ne sont pour l'instant appeles par aucune page :
+# la partie "CRM" du cockpit (listing/fiche contact, fiche entite) reste a
+# construire. Ils sont prets a etre branches dessus.
+ 
+STATUT_KANBAN_CHOICES = [
+    ('', '---------'),
+    ('1er_contact', '1er contact'),
+    ('echange_en_cours', 'Échange en cours'),
+    ('accord_envisage', 'Accord envisagé'),
+    ('partenaire_actif', 'Partenaire actif'),
+    ('en_pause', 'En pause'),
+    ('termine', 'Terminé'),
+]
+ 
+STATUT_ENTITE_CHOICES = [
+    ('', '---------'),
+    ('nouveau', 'Nouveau'),
+    ('partenaire', 'Partenaire'),
+    ('membre', 'Membre'),
+    ('fondateur', 'Fondateur'),
+]
+ 
+OBJECTIF_CHANGEMENT_STATUT_CHOICES = [
+    ('', '---------'),
+    ('devenir_partenaire', 'Devenir partenaire'),
+    ('devenir_membre', 'Devenir membre (partenaire → membre)'),
+    ('devenir_fondateur', 'Devenir fondateur (membre → fondateur)'),
+]
+ 
+ 
+class ChangerStatutContactProjetForm(forms.Form):
+    """
+    Changement du statut kanban d'un contact POUR UN PROJET DONNE. Le
+    contact et le projet sont fixés par la vue (pas des champs du
+    formulaire) : celui-ci ne porte que le nouveau statut.
+    """
+    statut_kanban = forms.ChoiceField(
+        choices=STATUT_KANBAN_CHOICES, required=True, label="Nouveau statut (pour ce projet)",
+    )
+ 
+ 
+def enregistrer_statut_contact_projet(contact, projet, nouveau_statut, create_by=None):
+    """
+    Met à jour (ou crée) la ligne ContactProjet pour ce couple, et journalise
+    le changement dans HistoriqueStatutContactProjet si le statut a
+    effectivement changé. Retourne l'instance ContactProjet.
+    """
+    contact_projet, _ = ContactProjet.objects.get_or_create(
+        contact=contact, projet=projet,
+    )
+    if contact_projet.statut_kanban != nouveau_statut:
+        contact_projet.statut_kanban = nouveau_statut
+        contact_projet.save()
+        HistoriqueStatutContactProjet.objects.create(
+            contact_projet=contact_projet,
+            statut_atteint=nouveau_statut,
+            create_by=create_by,
+        )
+    return contact_projet
+ 
+ 
+class ChangerStatutEntiteForm(forms.Form):
+    """Changement du statut institutionnel d'une entité (auprès de Vedecom)."""
+    statut_entite = forms.ChoiceField(
+        choices=STATUT_ENTITE_CHOICES, required=True, label="Nouveau statut (auprès de Vedecom)",
+    )
+ 
+ 
+def enregistrer_statut_entite(entite, nouveau_statut, create_by=None):
+    """
+    Met à jour Entite.statut_entite (affichage courant) et journalise le
+    changement dans HistoriqueStatutEntite si le statut a effectivement
+    changé. Retourne l'instance Entite.
+    """
+    if entite.statut_entite != nouveau_statut:
+        entite.statut_entite = nouveau_statut
+        entite.save()
+        HistoriqueStatutEntite.objects.create(
+            entite=entite,
+            statut_atteint=nouveau_statut,
+            create_by=create_by,
+        )
+    return entite
+ 
+ 
+class ActionForm(forms.ModelForm):
+    """
+    Déclaration d'une action de prospection. Le champ `objectif_changement_statut`
+    n'a de sens que pour une action hors-projet (projet vide) : ce n'est pas
+    imposé ici, seule une aide contextuelle le rappelle (cf template CRM à
+    construire).
+    """
+    objectif_changement_statut = forms.ChoiceField(
+        choices=OBJECTIF_CHANGEMENT_STATUT_CHOICES, required=False,
+        label="Objectif de la démarche (si hors projet)",
+    )
+ 
+    class Meta:
+        model = Action
+        fields = [
+            'contact', 'projet', 'type_action', 'objet_action',
+            'commentaire_action', 'date_action', 'objectif_changement_statut',
+        ]
+        widgets = {
+            'date_action': forms.DateInput(attrs={'type': 'date'}),
+            'commentaire_action': forms.Textarea(attrs={'rows': 3}),
+        }
+        labels = {
+            'type_action': "Type d'action",
+            'objet_action': "Objet",
+            'commentaire_action': "Commentaire",
+            'date_action': "Date de l'action",
+        }
+ 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.required = False
+        self.fields['contact'].queryset = Contact.objects.all().order_by('nom_contact')
+        self.fields['projet'].queryset = Projet.objects.all().order_by('acronyme_projet')
+ 
+    def clean(self):
+        cleaned_data = super().clean()
+        # Un objectif de changement de statut n'a de sens que hors projet :
+        # on ne bloque pas l'enregistrement, mais on l'ignore silencieusement
+        # si un projet est renseigné, pour ne pas laisser une info incohérente.
+        if cleaned_data.get('projet') and cleaned_data.get('objectif_changement_statut'):
+            cleaned_data['objectif_changement_statut'] = ''
+        return cleaned_data
+ 

@@ -664,6 +664,11 @@ class Action(models.Model):
     commentaire_action = models.CharField(max_length=500, blank=True, null=True, db_column='commentaire_action')
     date_action = models.DateField(blank=True, null=True, db_column='date_action')
     statut_action = models.CharField(max_length=50, blank=True, null=True)
+    # Renseigne uniquement pour les actions hors-projet (projet=None) menees
+    # dans l'optique de faire evoluer le statut institutionnel de l'entite
+    # du contact (cf HistoriqueStatutEntite) : 'devenir_partenaire',
+    # 'devenir_membre', 'devenir_fondateur'.
+    objectif_changement_statut = models.CharField(max_length=50, blank=True, null=True, db_column='objectif_changement_statut')
     create_at = models.DateTimeField(auto_now_add=True, db_column='create_at')
     create_by = models.CharField(max_length=150, blank=True, null=True, db_column='create_by')
     update_at = models.DateTimeField(auto_now=True, null=True, db_column='update_at')
@@ -898,3 +903,80 @@ class DocumentSharepoint(models.Model):
 
     def __str__(self):
         return self.nom_fichier
+
+# =============================================================================
+# Suivi des statuts (vision projet pour le contact, vision institutionnelle
+# pour l'entite) — cf echange sur la modelisation du CRM
+# =============================================================================
+ 
+class ContactProjet(models.Model):
+    """
+    Statut kanban d'un contact, propre a un projet donne (liaison N-N
+    Contact <-> Projet). Le statut general hors-projet reste sur
+    Contact.statut_kanban ; celui-ci ne concerne qu'un couple
+    (contact, projet) precis. C'est l'affichage courant : la veritable
+    source de verite est HistoriqueStatutContactProjet, sur le meme
+    principe que Projet.statut_actuel / Validation.
+    """
+    contact_projet_id = models.AutoField(primary_key=True, db_column='contact_projet_id')
+    contact = models.ForeignKey(
+        Contact, on_delete=models.CASCADE, db_column='contact_id', related_name='statuts_projets'
+    )
+    projet = models.ForeignKey(
+        Projet, on_delete=models.CASCADE, db_column='projet_id', related_name='contacts_statuts'
+    )
+    statut_kanban = models.CharField(max_length=50, blank=True, null=True, db_column='statut_kanban')
+    create_at = models.DateTimeField(auto_now_add=True, db_column='create_at')
+    update_at = models.DateTimeField(auto_now=True, null=True, db_column='update_at')
+ 
+    class Meta:
+        managed = False
+        db_table = '"projet_mgmt"."contact_projet"'
+        constraints = [
+            models.UniqueConstraint(fields=['contact', 'projet'], name='uq_contact_projet'),
+        ]
+ 
+    def __str__(self):
+        return f"{self.contact_id} — {self.projet_id} ({self.statut_kanban})"
+ 
+ 
+class HistoriqueStatutContactProjet(models.Model):
+    """Historique des changements de statut kanban pour un couple contact/projet."""
+    historique_id = models.AutoField(primary_key=True, db_column='historique_id')
+    contact_projet = models.ForeignKey(
+        ContactProjet, on_delete=models.CASCADE, db_column='contact_projet_id', related_name='historique'
+    )
+    statut_atteint = models.CharField(max_length=50, blank=True, null=True, db_column='statut_atteint')
+    create_at = models.DateTimeField(auto_now_add=True, db_column='create_at')
+    create_by = models.CharField(max_length=150, blank=True, null=True, db_column='create_by')
+ 
+    class Meta:
+        managed = False
+        db_table = '"projet_mgmt"."historique_statut_contact_projet"'
+ 
+    def __str__(self):
+        return f"{self.contact_projet_id} — {self.statut_atteint}"
+ 
+ 
+class HistoriqueStatutEntite(models.Model):
+    """
+    Historique du statut institutionnel d'une entite aupres de Vedecom
+    (nouveau -> partenaire -> membre -> fondateur). Entite.statut_entite
+    reste l'affichage courant ; cette table est la source de verite,
+    independante du statut "partenaire de projet" (table Partenaire).
+    """
+    historique_id = models.AutoField(primary_key=True, db_column='historique_id')
+    entite = models.ForeignKey(
+        Entite, on_delete=models.CASCADE, db_column='entite_id', related_name='historique_statut'
+    )
+    statut_atteint = models.CharField(max_length=50, db_column='statut_atteint')
+    create_at = models.DateTimeField(auto_now_add=True, db_column='create_at')
+    create_by = models.CharField(max_length=150, blank=True, null=True, db_column='create_by')
+ 
+    class Meta:
+        managed = False
+        db_table = '"crm"."historique_statut_entite"'
+ 
+    def __str__(self):
+        return f"{self.entite_id} — {self.statut_atteint}"
+ 

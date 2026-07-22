@@ -8,7 +8,10 @@ from datetime import date as date_cls
 
 from django.http import JsonResponse
 
-from .models import Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation, ProgStrategique, Domaine, DomaineProjet
+from .models import (
+    Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation,
+    ProgStrategique, Domaine, DomaineProjet,
+)
 from .forms import (
     ContactForm, EntiteMiniForm, ProjetForm, tabs_visibles_pour,
     get_benefice_formsets, save_benefice_formsets,
@@ -19,7 +22,7 @@ from .forms import (
     EvenementForm, get_restauration_formset, save_restauration_formset,
     VacationForm, HeureVacationForm, VACATION_NOUVEAU_PREFIX,
     calculer_equivalent_td, SEUIL_EQUIVALENT_TD_SALARIE, SEUIL_EQUIVALENT_TD_DOCTORANT,
-    ProgStrategiqueForm, DomaineForm,
+    ProgStrategiqueForm, DomaineForm, enregistrer_statut_contact_projet, enregistrer_statut_entite,
 )
 
 # Statuts à partir desquels les jalons (kickoff/mi-parcours/final) et les
@@ -481,3 +484,49 @@ def gestion_referentiels_view(request):
         "domaines_actifs": domaines_actifs,
         "domaines_archives": domaines_archives,
     })
+
+# ---------------------------------------------------------------------------
+# CRM : changement de statut (contact x projet / entite) — endpoints prets
+# a etre appeles depuis les futures pages CRM (listing/fiche contact,
+# fiche entite), qui restent a construire.
+# ---------------------------------------------------------------------------
+def changer_statut_contact_projet_view(request):
+    if request.method != "POST":
+        return JsonResponse({"erreur": "Méthode non autorisée."}, status=405)
+ 
+    contact = get_object_or_404(Contact, pk=request.POST.get("contact_id"))
+    projet = get_object_or_404(Projet, pk=request.POST.get("projet_id"))
+    nouveau_statut = request.POST.get("statut_kanban", "")
+ 
+    if not nouveau_statut:
+        return JsonResponse({"erreur": "Le statut est obligatoire."}, status=400)
+ 
+    # create_by : nom saisi manuellement en attendant Azure AD, comme pour
+    # les autres formulaires de l'application.
+    create_by = request.POST.get("create_by", "")
+ 
+    contact_projet = enregistrer_statut_contact_projet(contact, projet, nouveau_statut, create_by)
+    return JsonResponse({
+        "contact_projet_id": contact_projet.contact_projet_id,
+        "statut_kanban": contact_projet.statut_kanban,
+    })
+ 
+ 
+def changer_statut_entite_view(request):
+    if request.method != "POST":
+        return JsonResponse({"erreur": "Méthode non autorisée."}, status=405)
+ 
+    entite = get_object_or_404(Entite, pk=request.POST.get("entite_id"))
+    nouveau_statut = request.POST.get("statut_entite", "")
+ 
+    if not nouveau_statut:
+        return JsonResponse({"erreur": "Le statut est obligatoire."}, status=400)
+ 
+    create_by = request.POST.get("create_by", "")
+ 
+    entite = enregistrer_statut_entite(entite, nouveau_statut, create_by)
+    return JsonResponse({
+        "entite_id": entite.entite_id,
+        "statut_entite": entite.statut_entite,
+    })
+ 
