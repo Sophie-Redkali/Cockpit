@@ -345,13 +345,6 @@ a { color: inherit; }
   font-style: italic;
 }
 
-.cockpit-ordi {
-  display: block;
-  padding: 0.5rem;
-  border: 1px solid var(--color-gray-medium);
-  border-radius: 4px;
-}
-
 /* ---------- Écran dédié mobile (ex : nouvelle entité depuis le contact) ---------- */
 .cockpit-mobile-screen {
   display: none;
@@ -417,7 +410,6 @@ a { color: inherit; }
 .cockpit-btn-secondary:hover {
   background-color: var(--color-gray-light);
 }
-
 /* ---------- Vacations : compteur equivalent TD ---------- */
 .cockpit-total-td {
   padding: 0.6rem 0.9rem;
@@ -429,22 +421,181 @@ a { color: inherit; }
   color: var(--color-gray-dark);
   border: 1px solid var(--color-gray-medium);
 }
- 
+
 .cockpit-total-td.is-warning {
   background-color: #FFF3CD;
   color: #7A5B00;
   border-color: #E8C468;
 }
- 
+
 .cockpit-total-td.is-danger {
   background-color: #FDECEA;
   color: #B3261E;
   border-color: #F1A9A0;
 }
- 
+
 .cockpit-equiv-line {
   font-size: 0.85rem;
   color: var(--color-gray-medium);
   margin-top: 0.25rem;
 }
- 
+
+/* ---------- CRM : conteneur plus large pour le kanban ---------- */
+.cockpit-main--wide {
+  max-width: 1400px;
+}
+
+/* ---------- CRM : ligne de filtres ---------- */
+.cockpit-crm-filtres {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+/* Switch Entité / Projet */
+.cockpit-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.cockpit-switch input[type="checkbox"] {
+  display: none;
+}
+
+.cockpit-switch-track {
+  width: 42px;
+  height: 22px;
+  background-color: var(--color-gray-medium);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.cockpit-switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background-color: var(--color-white);
+  border-radius: 50%;
+  transition: transform 0.15s ease;
+}
+
+.cockpit-switch input:checked + .cockpit-switch-track {
+  background-color: var(--color-green-light);
+}
+
+.cockpit-switch input:checked + .cockpit-switch-track::after {
+  transform: translateX(20px);
+}
+
+.cockpit-switch-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-gray-medium);
+}
+
+.cockpit-switch-label.is-active {
+  color: var(--color-green-dark);
+}
+
+/* Les deux menus déroulants, l'un sous l'autre, largeur contenue */
+.cockpit-crm-selects {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 200px;
+  max-width: 260px;
+}
+
+.cockpit-crm-selects select {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--color-gray-medium);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  background-color: var(--color-white);
+  color: var(--color-gray-dark);
+}
+
+.cockpit-crm-statut {
+  font-weight: 500;
+  font-size: 0.9rem;
+  padding: 0.55rem 0.9rem;
+  background-color: var(--color-gray-light);
+  border: 1px solid var(--color-gray-medium);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.cockpit-crm-statut span {
+  font-weight: 400;
+  color: var(--color-gray-medium);
+  margin-right: 0.35rem;
+}
+
+/* ---------- CRM : kanban ---------- */
+.cockpit-kanban-board {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.cockpit-kanban-colonne {
+  flex: 1 1 0;
+  min-width: 200px;
+  background-color: var(--color-gray-light);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.cockpit-kanban-colonne h3 {
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem 0;
+  color: var(--color-gray-dark);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cockpit-kanban-count {
+  background-color: var(--color-white);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-gray-medium);
+}
+
+.cockpit-kanban-carte {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-gray-medium);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.cockpit-kanban-carte .cockpit-carte-nom {
+  font-weight: 600;
+  color: var(--color-gray-dark);
+}
+
+.cockpit-kanban-carte .cockpit-carte-meta {
+  color: var(--color-gray-medium);
+  font-size: 0.78rem;
+  margin-top: 0.2rem;
+}
+
+.cockpit-kanban-empty {
+  font-size: 0.8rem;
+  color: var(--color-gray-medium);
+  font-style: italic;
+}

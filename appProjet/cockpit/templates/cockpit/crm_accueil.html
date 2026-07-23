@@ -1,0 +1,221 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — CRM{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'accueil' %}">Cockpit</a> &gt; CRM{% endblock %}
+
+{% block main_class %}cockpit-main--wide{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'crm_accueil' %}">CRM</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+<li><a href="{% url 'projet_create' %}">Enregistrer un projet</a></li>
+{% endblock %}
+
+{% block content %}
+<div class="cockpit-form-card" style="margin-bottom: 1.5rem;">
+    <h2>CRM</h2>
+
+    <form method="get" id="crm-filtres-form" class="cockpit-crm-filtres">
+
+        <!-- Switch Entité / Projet -->
+        <label class="cockpit-switch">
+            <span class="cockpit-switch-label {% if mode == 'entite' %}is-active{% endif %}">Entité</span>
+            <input type="checkbox" name="vue" value="projet" id="switch-vue"
+                   {% if mode == 'projet' %}checked{% endif %}
+                   onchange="crmFiltreChange(['entite_id', 'projet_id'])">
+            <span class="cockpit-switch-track" onclick="document.getElementById('switch-vue').click();"></span>
+            <span class="cockpit-switch-label {% if mode == 'projet' %}is-active{% endif %}">Projet</span>
+        </label>
+
+        {% if mode == 'entite' %}
+            <div class="cockpit-crm-selects">
+                <select name="entite_id" id="id_entite_id" onchange="crmFiltreChange(['projet_id'])">
+                    <option value="">Choisir une entité...</option>
+                    {% for e in entites %}
+                    <option value="{{ e.entite_id }}" {% if entite_id == e.entite_id|stringformat:"s" %}selected{% endif %}>
+                        {{ e.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                {% if entite_sel %}
+                <select name="projet_id" id="id_projet_id" onchange="crmFiltreChange([])">
+                    <option value="all" {% if not projet_sel %}selected{% endif %}>Tout afficher</option>
+                    {% for p in projets_lies %}
+                    <option value="{{ p.projet_id }}" {% if projet_sel and projet_sel.projet_id == p.projet_id %}selected{% endif %}>
+                        {{ p.acronyme_projet }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <select disabled>
+                    <option>Choisissez d'abord une entité</option>
+                </select>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="cockpit-crm-selects">
+                <select name="projet_id" id="id_projet_id" onchange="crmFiltreChange(['entite_id'])">
+                    <option value="">Choisir un projet...</option>
+                    {% for p in projets %}
+                    <option value="{{ p.projet_id }}" {% if projet_id == p.projet_id|stringformat:"s" %}selected{% endif %}>
+                        {{ p.acronyme_projet }}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                {% if projet_sel %}
+                <select name="entite_id" id="id_entite_id" onchange="crmFiltreChange([])">
+                    <option value="all" {% if not entite_sel %}selected{% endif %}>Tout afficher</option>
+                    {% for e in entites_liees %}
+                    <option value="{{ e.entite_id }}" {% if entite_sel and entite_sel.entite_id == e.entite_id %}selected{% endif %}>
+                        {{ e.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <select disabled>
+                    <option>Choisissez d'abord un projet</option>
+                </select>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% if statut_label %}
+        <div class="cockpit-crm-statut">
+            <span>{{ statut_titre }} :</span>{{ statut_label }}
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+{% if not entite_sel and not projet_sel %}
+    <p class="cockpit-placeholder">Sélectionnez une entité ou un projet ci-dessus pour afficher les contacts.</p>
+{% endif %}
+
+<div class="cockpit-kanban-board">
+    {% for colonne in colonnes %}
+    <div class="cockpit-kanban-colonne">
+        <h3>
+            {{ colonne.label }}
+            <span class="cockpit-kanban-count">{{ colonne.cartes|length }}</span>
+        </h3>
+
+        <div class="cockpit-kanban-cartes" data-statut-code="{{ colonne.code }}">
+            {% for carte in colonne.cartes %}
+            <div class="cockpit-kanban-carte" draggable="true" data-cle="{{ carte.cle }}">
+                <a href="{% url 'contact_detail' carte.contact.contact_id %}" class="cockpit-carte-nom">
+                    {{ carte.contact.prenom_contact }} {{ carte.contact.nom_contact }}
+                </a>
+                {% if carte.entite_nom %}
+                <div class="cockpit-carte-meta">{{ carte.entite_nom }}</div>
+                {% endif %}
+                {% if carte.projet_nom %}
+                <div class="cockpit-carte-meta">Projet : {{ carte.projet_nom }}</div>
+                {% endif %}
+                <div class="cockpit-carte-meta">
+                    {% if carte.derniere_action %}
+                        Dernière action : {{ carte.derniere_action.type_action|default:"—" }}
+                        {% if carte.derniere_action.date_action %} ({{ carte.derniere_action.date_action }}){% endif %}
+                    {% else %}
+                        Aucune action enregistrée
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <p class="cockpit-kanban-empty">Aucun contact</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    function crmFiltreChange(champsAReinitialiser) {
+        const form = document.getElementById('crm-filtres-form');
+        (champsAReinitialiser || []).forEach(function (nom) {
+            const input = form.querySelector(`[name="${nom}"]`);
+            if (input) { input.value = ''; }
+        });
+        form.submit();
+    }
+
+    // --- Glisser-déposer des cartes du kanban ---
+    function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? decodeURIComponent(match[2]) : null;
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    let carteEnCours = null;
+
+    document.querySelectorAll('.cockpit-kanban-carte').forEach(function (carte) {
+        carte.addEventListener('dragstart', function () {
+            carteEnCours = carte;
+            carte.classList.add('is-dragging');
+        });
+        carte.addEventListener('dragend', function () {
+            carte.classList.remove('is-dragging');
+            carteEnCours = null;
+        });
+    });
+
+    document.querySelectorAll('.cockpit-kanban-cartes').forEach(function (zone) {
+        zone.addEventListener('dragover', function (event) {
+            event.preventDefault();
+            zone.classList.add('is-dragover');
+        });
+        zone.addEventListener('dragleave', function () {
+            zone.classList.remove('is-dragover');
+        });
+        zone.addEventListener('drop', function (event) {
+            event.preventDefault();
+            zone.classList.remove('is-dragover');
+            if (!carteEnCours) { return; }
+
+            const nouveauStatut = zone.dataset.statutCode;
+            const cle = carteEnCours.dataset.cle;
+            const ancienneZone = carteEnCours.parentElement;
+            if (ancienneZone === zone) { return; }
+
+            // mise à jour optimiste de l'affichage, avant même la réponse serveur
+            const placeholderVide = zone.querySelector('.cockpit-kanban-empty');
+            if (placeholderVide) { placeholderVide.remove(); }
+            zone.appendChild(carteEnCours);
+            majCompteurs();
+
+            const donnees = new URLSearchParams({ cle: cle, statut_kanban: nouveauStatut });
+            fetch('{% url "changer_statut_carte" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrftoken,
+                },
+                body: donnees.toString(),
+            })
+                .then(function (res) { if (!res.ok) { throw new Error('Échec de la mise à jour'); } })
+                .catch(function () {
+                    // en cas d'échec, on remet la carte à sa place d'origine
+                    ancienneZone.appendChild(carteEnCours);
+                    majCompteurs();
+                    alert("La mise à jour du statut a échoué, la carte a été replacée.");
+                });
+        });
+    });
+
+    function majCompteurs() {
+        document.querySelectorAll('.cockpit-kanban-colonne').forEach(function (colonne) {
+            const zone = colonne.querySelector('.cockpit-kanban-cartes');
+            const compteur = colonne.querySelector('.cockpit-kanban-count');
+            if (zone && compteur) {
+                compteur.textContent = zone.querySelectorAll('.cockpit-kanban-carte').length;
+            }
+        });
+    }
+</script>
+{% endblock %}

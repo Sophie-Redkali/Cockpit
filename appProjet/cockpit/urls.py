@@ -16,4 +16,8 @@ urlpatterns = [
     path('referentiels/', views.gestion_referentiels_view, name='gestion_referentiels'),
     path('api/contact-projet/statut/', views.changer_statut_contact_projet_view, name='changer_statut_contact_projet'),
     path('api/entite/statut/', views.changer_statut_entite_view, name='changer_statut_entite'),
+    path('crm/', views.crm_accueil_view, name='crm_accueil'),
+    path('crm/contact/<int:pk>/', views.contact_detail_view, name='contact_detail'),
+    path('crm/contact/<int:pk>/statut/', views.changer_statut_contact_projet_depuis_fiche_view, name='changer_statut_contact_projet_fiche'),
+    path('api/kanban/statut/', views.changer_statut_carte_view, name='changer_statut_carte'),
 ]

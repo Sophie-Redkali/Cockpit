@@ -1,0 +1,239 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — {{ contact.prenom_contact }} {{ contact.nom_contact }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'accueil' %}">Cockpit</a> &gt;
+<a href="{% url 'crm_accueil' %}">CRM</a> &gt;
+{{ contact.prenom_contact }} {{ contact.nom_contact }}
+{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'cockpit/css/tom-select.default.min.css' %}" rel="stylesheet">
+<script src="{% static 'cockpit/js/tom-select.complete.js' %}"></script>
+{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'crm_accueil' %}">CRM</a></li>
+<li><a href="{% url 'contact_create' %}">Nouveau contact</a></li>
+{% endblock %}
+
+{% block content %}
+
+<!-- Informations du contact -->
+<div class="cockpit-form-card" style="margin-bottom: 1.5rem;">
+    <h2>{{ contact.prenom_contact }} {{ contact.nom_contact }}</h2>
+
+    {% if form.non_field_errors %}
+        <div class="cockpit-alert">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="contact">
+
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ form.prenom_contact.id_for_label }}">Prénom</label>
+                {{ form.prenom_contact }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.nom_contact.id_for_label }}">Nom</label>
+                {{ form.nom_contact }}
+            </div>
+        </div>
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ form.email_contact.id_for_label }}">Email</label>
+                {{ form.email_contact }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.telephone_contact.id_for_label }}">Téléphone</label>
+                {{ form.telephone_contact }}
+            </div>
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ form.poste_contact.id_for_label }}">Poste</label>
+            {{ form.poste_contact }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="id_entite">Entité (employeur)</label>
+            {{ form.entite_selection }}
+            <p class="cockpit-placeholder">
+                Entité introuvable dans la liste ? Choisissez "Autre" pour en enregistrer une nouvelle.
+            </p>
+        </div>
+
+        <div id="entite-mini-form" style="display:none;" data-has-errors="{% if entite_mini_form.errors %}true{% else %}false{% endif %}">
+            <div class="cockpit-eval-section">
+                <h3>Nouvelle entité</h3>
+                {% if entite_mini_form.non_field_errors %}
+                    <div class="cockpit-alert">{{ entite_mini_form.non_field_errors }}</div>
+                {% endif %}
+                <div class="cockpit-field">
+                    <label for="{{ entite_mini_form.nom.id_for_label }}">{{ entite_mini_form.nom.label }} *</label>
+                    {{ entite_mini_form.nom }}
+                </div>
+                <div class="cockpit-inline-group">
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.type_entite.id_for_label }}">{{ entite_mini_form.type_entite.label }}</label>
+                        {{ entite_mini_form.type_entite }}
+                    </div>
+                    <div class="cockpit-field">
+                        <label for="{{ entite_mini_form.secteur_entite.id_for_label }}">{{ entite_mini_form.secteur_entite.label }}</label>
+                        {{ entite_mini_form.secteur_entite }}
+                    </div>
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ entite_mini_form.telephone_entite.id_for_label }}">{{ entite_mini_form.telephone_entite.label }}</label>
+                    {{ entite_mini_form.telephone_entite }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ entite_mini_form.adresse_entite.id_for_label }}">{{ entite_mini_form.adresse_entite.label }}</label>
+                    {{ entite_mini_form.adresse_entite }}
+                </div>
+                <div class="cockpit-field">
+                    <label for="{{ entite_mini_form.url_entite.id_for_label }}">{{ entite_mini_form.url_entite.label }}</label>
+                    {{ entite_mini_form.url_entite }}
+                </div>
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.fichier.id_for_label }}">Ajouter un document</label>
+            {{ form.fichier }}
+        </div>
+
+        <button type="submit" class="cockpit-btn">Enregistrer</button>
+    </form>
+</div>
+
+<!-- Statut général (hors projet) -->
+<div class="cockpit-form-card" style="margin-bottom: 1.5rem;">
+    <h2>Statut général (hors projet)</h2>
+    <p class="cockpit-placeholder">Statut actuel : <strong>{{ statut_general_label }}</strong></p>
+    <form method="post" action="{% url 'changer_statut_contact_projet_fiche' contact.pk %}" class="cockpit-inline-group" style="align-items:flex-end;">
+        {% csrf_token %}
+        <div class="cockpit-field" style="flex:1;">
+            <label for="{{ statut_general_form.statut_kanban.id_for_label }}">{{ statut_general_form.statut_kanban.label }}</label>
+            {{ statut_general_form.statut_kanban }}
+        </div>
+        <button type="submit" class="cockpit-btn-secondary">Mettre à jour</button>
+    </form>
+</div>
+
+<!-- Statuts par projet -->
+<div class="cockpit-form-card" style="margin-bottom: 1.5rem;">
+    <h2>Statuts par projet</h2>
+
+    {% for cp in statuts_projets %}
+    <div class="cockpit-eval-row" style="align-items:flex-end;">
+        <div style="flex:1;">
+            <strong>{{ cp.projet.acronyme_projet }}</strong> — {{ cp.projet.nom_projet }}
+        </div>
+        <form method="post" action="{% url 'changer_statut_contact_projet_fiche' contact.pk %}" class="cockpit-inline-group" style="align-items:flex-end;">
+            {% csrf_token %}
+            <input type="hidden" name="contact_projet_id" value="{{ cp.contact_projet_id }}">
+            <div class="cockpit-field" style="margin-bottom:0;">
+                <select name="statut_kanban">
+                    {% for code, label in statut_choices %}
+                    <option value="{{ code }}" {% if code == cp.statut_kanban %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="cockpit-btn-secondary">Mettre à jour</button>
+        </form>
+    </div>
+    {% empty %}
+    <p class="cockpit-placeholder">Ce contact n'est pour l'instant suivi sur aucun projet.</p>
+    {% endfor %}
+</div>
+
+<!-- Historique des actions -->
+<div class="cockpit-form-card">
+    <h2>Actions</h2>
+
+    {% for action in actions %}
+    <div class="cockpit-eval-row">
+        <div style="flex:1;">
+            <strong>{{ action.type_action|default:"—" }}</strong>
+            {% if action.objet_action %} — {{ action.objet_action }}{% endif %}
+            {% if action.projet %} — Projet : {{ action.projet.acronyme_projet }}{% endif %}
+            <div class="cockpit-carte-meta">
+                {% if action.date_action %}{{ action.date_action }}{% endif %}
+                {% if action.commentaire_action %} — {{ action.commentaire_action }}{% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <p class="cockpit-placeholder">Aucune action enregistrée pour ce contact.</p>
+    {% endfor %}
+
+    <hr>
+    <h3>Ajouter une action</h3>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form" value="action">
+
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ action_form.type_action.id_for_label }}">{{ action_form.type_action.label }}</label>
+                {{ action_form.type_action }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ action_form.date_action.id_for_label }}">{{ action_form.date_action.label }}</label>
+                {{ action_form.date_action }}
+            </div>
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ action_form.objet_action.id_for_label }}">{{ action_form.objet_action.label }}</label>
+            {{ action_form.objet_action }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ action_form.projet.id_for_label }}">Projet (optionnel)</label>
+            {{ action_form.projet }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ action_form.objectif_changement_statut.id_for_label }}">{{ action_form.objectif_changement_statut.label }}</label>
+            {{ action_form.objectif_changement_statut }}
+        </div>
+        <div class="cockpit-field">
+            <label for="{{ action_form.commentaire_action.id_for_label }}">{{ action_form.commentaire_action.label }}</label>
+            {{ action_form.commentaire_action }}
+        </div>
+
+        <button type="submit" class="cockpit-btn">Ajouter l'action</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const entiteMiniForm = document.getElementById('entite-mini-form');
+    const nomEntiteInput = document.getElementById('{{ entite_mini_form.nom.id_for_label }}');
+
+    new TomSelect('#id_entite', {
+        valueField: "id",
+        labelField: "nom",
+        searchField: "nom",
+        create: false,
+        options: [{ id: "autre", nom: "Autre (entité non trouvée, à créer)" }],
+        load: function (query, callback) {
+            fetch(`/api/entite/recherche/?q=${encodeURIComponent(query)}`)
+                .then(res => res.json())
+                .then(data => callback(data))
+                .catch(() => callback());
+        },
+        onChange: function (value) {
+            entiteMiniForm.style.display = (value === 'autre') ? 'block' : 'none';
+        },
+    });
+
+    if (entiteMiniForm.dataset.hasErrors === 'true') {
+        entiteMiniForm.style.display = 'block';
+    }
+</script>
+{% endblock %}

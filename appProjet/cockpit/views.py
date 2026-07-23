@@ -11,6 +11,7 @@ from django.http import JsonResponse
 from .models import (
     Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation,
     ProgStrategique, Domaine, DomaineProjet,
+    ContactProjet, Partenaire, Financeur, InteretMembre, Action,
 )
 from .forms import (
     ContactForm, EntiteMiniForm, ProjetForm, tabs_visibles_pour,
@@ -23,6 +24,9 @@ from .forms import (
     VacationForm, HeureVacationForm, VACATION_NOUVEAU_PREFIX,
     calculer_equivalent_td, SEUIL_EQUIVALENT_TD_SALARIE, SEUIL_EQUIVALENT_TD_DOCTORANT,
     ProgStrategiqueForm, DomaineForm, enregistrer_statut_contact_projet, enregistrer_statut_entite,
+    KANBAN_COLONNES, label_statut_kanban, label_statut_entite,
+    ActionForm, ChangerStatutContactGeneralForm, enregistrer_statut_contact_general,
+    STATUT_KANBAN_CHOICES,
 )
 
 # Statuts à partir desquels les jalons (kickoff/mi-parcours/final) et les
@@ -530,3 +534,266 @@ def changer_statut_entite_view(request):
         "statut_entite": entite.statut_entite,
     })
  
+
+# ---------------------------------------------------------------------------
+# CRM : page d'accueil (filtres entité/projet + kanban des contacts)
+# ---------------------------------------------------------------------------
+def _projets_lies_a_entite(entite):
+    """Projets où l'entité est partenaire, financeur et/ou membre d'intérêt."""
+    ids = set()
+    ids.update(Partenaire.objects.filter(entite=entite).values_list('projet_id', flat=True))
+    ids.update(Financeur.objects.filter(entite=entite).values_list('projet_id', flat=True))
+    ids.update(InteretMembre.objects.filter(entite=entite).values_list('projet_id', flat=True))
+    return Projet.objects.filter(projet_id__in=ids).order_by('acronyme_projet')
+
+
+def _entites_liees_a_projet(projet):
+    """Entités partenaires, financeuses et/ou membres d'intérêt de ce projet."""
+    ids = set()
+    ids.update(Partenaire.objects.filter(projet=projet).values_list('entite_id', flat=True))
+    ids.update(Financeur.objects.filter(projet=projet).values_list('entite_id', flat=True))
+    ids.update(InteretMembre.objects.filter(projet=projet).values_list('entite_id', flat=True))
+    return Entite.objects.filter(entite_id__in=ids).order_by('nom')
+
+
+def _derniere_action(contact, projet=None):
+    """
+    Dernière action enregistrée avec ce contact. Si un projet précis est en
+    contexte, on privilégie la dernière action liée à ce projet ; à défaut
+    (ou hors contexte projet), la dernière action du contact tous projets
+    confondus.
+    """
+    if projet:
+        action = Action.objects.filter(contact=contact, projet=projet) \
+            .order_by('-date_action', '-create_at').first()
+        if action:
+            return action
+    return Action.objects.filter(contact=contact).order_by('-date_action', '-create_at').first()
+
+
+def _carte(contact, statut_kanban, projet_a_afficher, projet_pour_action, cle):
+    action = _derniere_action(contact, projet_pour_action)
+    return {
+        "contact": contact,
+        "entite_nom": contact.entite.nom if contact.entite else None,
+        "projet_nom": projet_a_afficher.acronyme_projet if projet_a_afficher else None,
+        "statut_code": statut_kanban or "1er_contact",
+        "statut_label": label_statut_kanban(statut_kanban or "1er_contact"),
+        "derniere_action": action,
+        # Identifie la carte pour le glisser-déposer (cf changer_statut_carte_view) :
+        # "cp:<contact_projet_id>" pour un statut par projet, "general:<contact_id>"
+        # pour le statut général hors-projet.
+        "cle": cle,
+    }
+
+
+def _construire_cartes(mode, entite_sel, projet_sel):
+    """
+    Construit la liste des cartes à répartir dans le kanban, selon le mode
+    actif et les sélections faites. Cf explications données à l'utilisateur :
+    - mode 'entite' + projet précis : contacts de l'entité suivis sur CE projet.
+    - mode 'entite' + "Tout afficher" : tous les contacts de l'entité, une
+      carte par association projet (ou une carte "générale" s'ils n'ont
+      aucune association projet).
+    - mode 'projet' + entité précise : contacts de cette entité suivis sur
+      le projet.
+    - mode 'projet' + "Tout afficher" : tous les contacts suivis sur ce
+      projet, quelle que soit leur entité.
+    """
+    cartes = []
+
+    if mode == "entite" and entite_sel:
+        if projet_sel:
+            qs = ContactProjet.objects.filter(
+                contact__entite=entite_sel, projet=projet_sel
+            ).select_related('contact', 'contact__entite')
+            for cp in qs:
+                cartes.append(_carte(cp.contact, cp.statut_kanban, None, projet_sel, f"cp:{cp.contact_projet_id}"))
+        else:
+            for contact in Contact.objects.filter(entite=entite_sel).select_related('entite'):
+                cps = list(ContactProjet.objects.filter(contact=contact).select_related('projet'))
+                if cps:
+                    for cp in cps:
+                        cartes.append(_carte(contact, cp.statut_kanban, cp.projet, cp.projet, f"cp:{cp.contact_projet_id}"))
+                else:
+                    cartes.append(_carte(contact, contact.statut_kanban, None, None, f"general:{contact.contact_id}"))
+
+    elif mode == "projet" and projet_sel:
+        qs = ContactProjet.objects.filter(projet=projet_sel).select_related('contact', 'contact__entite')
+        if entite_sel:
+            qs = qs.filter(contact__entite=entite_sel)
+        for cp in qs:
+            cartes.append(_carte(cp.contact, cp.statut_kanban, None, projet_sel, f"cp:{cp.contact_projet_id}"))
+
+    return cartes
+
+
+def crm_accueil_view(request):
+    mode = request.GET.get("vue", "entite")
+    if mode not in ("entite", "projet"):
+        mode = "entite"
+
+    entite_id = request.GET.get("entite_id") or ""
+    projet_id = request.GET.get("projet_id") or ""
+
+    entite_sel = None
+    projet_sel = None
+    projets_lies = Projet.objects.none()
+    entites_liees = Entite.objects.none()
+    statut_label = None
+    statut_titre = None
+
+    if mode == "entite":
+        if entite_id:
+            entite_sel = get_object_or_404(Entite, pk=entite_id)
+            projets_lies = _projets_lies_a_entite(entite_sel)
+            statut_titre = "Statut de l'entité (Vedecom)"
+            statut_label = label_statut_entite(entite_sel.statut_entite)
+            if projet_id and projet_id != "all":
+                projet_sel = get_object_or_404(Projet, pk=projet_id)
+    else:
+        if projet_id:
+            projet_sel = get_object_or_404(Projet, pk=projet_id)
+            entites_liees = _entites_liees_a_projet(projet_sel)
+            statut_titre = "Statut du projet"
+            statut_label = projet_sel.get_statut_actuel_display()
+            if entite_id and entite_id != "all":
+                entite_sel = get_object_or_404(Entite, pk=entite_id)
+
+    cartes = _construire_cartes(mode, entite_sel, projet_sel)
+
+    kanban = {code: [] for code in KANBAN_COLONNES}
+    for carte in cartes:
+        kanban.setdefault(carte["statut_code"], []).append(carte)
+
+    colonnes = [
+        {"code": code, "label": label_statut_kanban(code), "cartes": kanban.get(code, [])}
+        for code in KANBAN_COLONNES
+    ]
+
+    return render(request, "cockpit/crm_accueil.html", {
+        "mode": mode,
+        "entites": Entite.objects.all().order_by('nom'),
+        "projets": Projet.objects.all().order_by('acronyme_projet'),
+        "entite_id": entite_id,
+        "projet_id": projet_id,
+        "entite_sel": entite_sel,
+        "projet_sel": projet_sel,
+        "projets_lies": projets_lies,
+        "entites_liees": entites_liees,
+        "statut_titre": statut_titre,
+        "statut_label": statut_label,
+        "colonnes": colonnes,
+    })
+
+
+# ---------------------------------------------------------------------------
+# CRM : glisser-déposer d'une carte du kanban vers une autre colonne
+# ---------------------------------------------------------------------------
+def changer_statut_carte_view(request):
+    """
+    Endpoint générique appelé par le glisser-déposer du kanban CRM. La carte
+    est identifiée par sa "clé" ("cp:<contact_projet_id>" pour un statut par
+    projet, "general:<contact_id>" pour le statut général hors-projet),
+    cf _carte() dans crm_accueil_view.
+    """
+    if request.method != "POST":
+        return JsonResponse({"erreur": "Méthode non autorisée."}, status=405)
+
+    cle = request.POST.get("cle", "")
+    nouveau_statut = request.POST.get("statut_kanban", "")
+
+    if nouveau_statut not in KANBAN_COLONNES:
+        return JsonResponse({"erreur": "Statut invalide."}, status=400)
+
+    if cle.startswith("cp:"):
+        contact_projet = get_object_or_404(ContactProjet, pk=cle[len("cp:"):])
+        # create_by : à remplacer par l'utilisateur Azure AD une fois
+        # l'authentification en place.
+        enregistrer_statut_contact_projet(
+            contact_projet.contact, contact_projet.projet, nouveau_statut, create_by=None,
+        )
+    elif cle.startswith("general:"):
+        contact = get_object_or_404(Contact, pk=cle[len("general:"):])
+        enregistrer_statut_contact_general(contact, nouveau_statut)
+    else:
+        return JsonResponse({"erreur": "Carte introuvable."}, status=400)
+
+    return JsonResponse({"ok": True, "statut_kanban": nouveau_statut})
+
+
+# ---------------------------------------------------------------------------
+# CRM : fiche contact (visualisation / modification)
+# ---------------------------------------------------------------------------
+def contact_detail_view(request, pk):
+    contact = get_object_or_404(Contact, pk=pk)
+
+    if request.method == "POST" and request.POST.get("form") == "contact":
+        form = ContactForm(request.POST, request.FILES, instance=contact)
+        entite_mini_form = EntiteMiniForm(request.POST, prefix='entite')
+
+        if form.is_valid():
+            entite, erreur_entite = form.resolve_entite(entite_mini_form)
+            if erreur_entite:
+                form.add_error(None, erreur_entite)
+            else:
+                contact = form.save(commit=False)
+                contact.entite = entite
+                contact.save()
+
+                fichier = form.cleaned_data.get("fichier")
+                resultat = _enregistrer_document(
+                    contact, fichier, "contacts",
+                    f"{contact.prenom_contact} {contact.nom_contact}",
+                    request,
+                )
+                if isinstance(resultat, str) and resultat.startswith("__ERREUR__"):
+                    form.add_error(None, "Le fichier n'a pas pu être envoyé sur SharePoint : "
+                                          + resultat.split(":", 1)[1])
+                else:
+                    return redirect("contact_detail", pk=contact.pk)
+    else:
+        form = ContactForm(instance=contact, initial={
+            "entite_selection": contact.entite_id or "",
+        })
+        entite_mini_form = EntiteMiniForm(prefix='entite')
+
+    if request.method == "POST" and request.POST.get("form") == "action":
+        action_form = ActionForm(request.POST, contact_fixe=contact)
+        if action_form.is_valid():
+            action_form.save()
+            return redirect("contact_detail", pk=contact.pk)
+    else:
+        action_form = ActionForm(contact_fixe=contact, initial={"date_action": date_cls.today()})
+
+    statuts_projets = ContactProjet.objects.filter(contact=contact).select_related('projet').order_by('projet__acronyme_projet')
+    statut_general_form = ChangerStatutContactGeneralForm(initial={"statut_kanban": contact.statut_kanban})
+
+    actions = Action.objects.filter(contact=contact).select_related('projet').order_by('-date_action', '-create_at')
+
+    return render(request, "cockpit/contact_detail.html", {
+        "contact": contact,
+        "form": form,
+        "entite_mini_form": entite_mini_form,
+        "action_form": action_form,
+        "statuts_projets": statuts_projets,
+        "statut_choices": STATUT_KANBAN_CHOICES,
+        "statut_general_form": statut_general_form,
+        "statut_general_label": label_statut_kanban(contact.statut_kanban),
+        "actions": actions,
+    })
+
+
+def changer_statut_contact_projet_depuis_fiche_view(request, pk):
+    """Changement de statut (par projet, ou général si contact_projet_id absent) depuis la fiche contact."""
+    contact = get_object_or_404(Contact, pk=pk)
+    if request.method == "POST":
+        contact_projet_id = request.POST.get("contact_projet_id")
+        nouveau_statut = request.POST.get("statut_kanban", "")
+        if nouveau_statut:
+            if contact_projet_id:
+                contact_projet = get_object_or_404(ContactProjet, pk=contact_projet_id, contact=contact)
+                enregistrer_statut_contact_projet(contact, contact_projet.projet, nouveau_statut, create_by=None)
+            else:
+                enregistrer_statut_contact_general(contact, nouveau_statut)
+    return redirect("contact_detail", pk=contact.pk)

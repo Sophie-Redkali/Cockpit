@@ -1064,6 +1064,20 @@ OBJECTIF_CHANGEMENT_STATUT_CHOICES = [
     ('devenir_membre', 'Devenir membre (partenaire → membre)'),
     ('devenir_fondateur', 'Devenir fondateur (membre → fondateur)'),
 ]
+
+# Ordre d'affichage des colonnes du kanban CRM (cf crm_accueil_view) : toutes
+# les valeurs de STATUT_KANBAN_CHOICES sauf le choix vide.
+KANBAN_COLONNES = [code for code, _ in STATUT_KANBAN_CHOICES if code]
+
+
+def label_statut_kanban(code):
+    """Libellé lisible d'un statut kanban (contact ou contact x projet)."""
+    return dict(STATUT_KANBAN_CHOICES).get(code, code or "Non défini")
+
+
+def label_statut_entite(code):
+    """Libellé lisible du statut institutionnel d'une entité."""
+    return dict(STATUT_ENTITE_CHOICES).get(code, code or "Non défini")
  
  
 class ChangerStatutContactProjetForm(forms.Form):
@@ -1119,8 +1133,27 @@ def enregistrer_statut_entite(entite, nouveau_statut, create_by=None):
             create_by=create_by,
         )
     return entite
- 
- 
+
+
+class ChangerStatutContactGeneralForm(forms.Form):
+    """Changement du statut kanban general (hors-projet) d'un contact."""
+    statut_kanban = forms.ChoiceField(
+        choices=STATUT_KANBAN_CHOICES, required=True, label="Statut general (hors projet)",
+    )
+
+
+def enregistrer_statut_contact_general(contact, nouveau_statut):
+    """
+    Met a jour Contact.statut_kanban directement. Contrairement au statut
+    par projet, il n'y a pour l'instant pas de table d'historique dediee a
+    ce statut general : seul l'affichage courant est conserve.
+    """
+    if contact.statut_kanban != nouveau_statut:
+        contact.statut_kanban = nouveau_statut
+        contact.save(update_fields=['statut_kanban'])
+    return contact
+
+
 class ActionForm(forms.ModelForm):
     """
     Déclaration d'une action de prospection. Le champ `objectif_changement_statut`
@@ -1150,12 +1183,25 @@ class ActionForm(forms.ModelForm):
             'date_action': "Date de l'action",
         }
  
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, contact_fixe=None, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.required = False
         self.fields['contact'].queryset = Contact.objects.all().order_by('nom_contact')
         self.fields['projet'].queryset = Projet.objects.all().order_by('acronyme_projet')
+        # Utilisé depuis la fiche contact : le contact est déjà connu, pas
+        # besoin de le laisser choisir (et éviter une erreur de saisie).
+        if contact_fixe is not None:
+            del self.fields['contact']
+            self._contact_fixe = contact_fixe
+
+    def save(self, commit=True):
+        action = super().save(commit=False)
+        if getattr(self, '_contact_fixe', None) is not None:
+            action.contact = self._contact_fixe
+        if commit:
+            action.save()
+        return action
  
     def clean(self):
         cleaned_data = super().clean()
