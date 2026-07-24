@@ -191,10 +191,7 @@ class EntiteMiniForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for name, field in self.fields.items():
             field.required = False
-        # Seul champ réellement obligatoire pour permettre la création :
-        # sans nom, une entité est inexploitable pour les administrateurs
-        # fonctionnels qui devront ensuite la compléter.
-        self.fields['nom'].required = True
+        # Nom d'une nouvelle entité obligatoire mais géré coté bdd
 
     def save(self, commit=True):
         entite = super().save(commit=False)
@@ -709,6 +706,7 @@ class EvenementForm(forms.ModelForm):
             'logistique_intervenant',
             'restauration',
             'infos_complementaire',
+            'create_by',
         ]
         widgets = {
             'heure_debut': forms.TimeInput(attrs={'type': 'time'}),
@@ -1211,4 +1209,164 @@ class ActionForm(forms.ModelForm):
         if cleaned_data.get('projet') and cleaned_data.get('objectif_changement_statut'):
             cleaned_data['objectif_changement_statut'] = ''
         return cleaned_data
- 
+
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+# Évènements : fiche de modification (page /evenement/fiche_evenement/<id>/)
+# Distinct du formulaire de création EvenementForm :
+#   - le champ create_by n'est pas modifiable (lecture seule dans le template)
+#   - un champ statut_event est exposé à l'utilisateur avec les choix autorisés
+#   - nom_event et date_event portent ici sur l'objet Event (pas DemandeEvent)
+# -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+STATUT_EVENT_CHOICES = [
+    ('en_cours', 'En cours'),
+    ('termine', 'Terminé'),
+    ('annule', 'Annulé'),
+]
+
+# Choix complets incluant "nouveau" (lecture seule côté métier, jamais
+# sélectionnable par l'utilisateur dans la fiche, mais nécessaire pour
+# l'affichage du libellé quand le statut en base vaut "nouveau").
+STATUT_EVENT_CHOICES_AFFICHAGE = [
+    ('nouveau', 'Nouveau'),
+] + STATUT_EVENT_CHOICES
+
+
+def get_statut_event_display(code):
+    return dict(STATUT_EVENT_CHOICES_AFFICHAGE).get(code, code or '—')
+
+
+class FicheEvenementForm(forms.Form):
+    """
+    Formulaire de modification de la fiche évènement. Couvre à la fois
+    les champs de DemandeEvent et ceux de Event (nom_event, date_event).
+    Le champ create_by est intentionnellement absent : il est affiché en
+    lecture seule dans le template et ne doit pas être modifiable.
+    """
+    # Champs Event
+    nom_event = forms.CharField(
+        required=False, max_length=150, label="Nom de l'évènement",
+    )
+    date_event = forms.DateField(
+        required=False, label="Date de l'évènement",
+        widget=forms.DateInput(attrs={'type': 'date'}),
+    )
+
+    # Statut : "nouveau" exclu des choix (ne peut pas y revenir)
+    statut_event = forms.ChoiceField(
+        choices=STATUT_EVENT_CHOICES,
+        required=True,
+        label="Statut",
+    )
+
+    # Champs DemandeEvent
+    projet = forms.ModelChoiceField(
+        queryset=Projet.objects.none(), required=False, label="Acronyme du projet",
+    )
+    type_event = forms.ChoiceField(
+        choices=TYPE_EVENT_CHOICES, required=False, label="Type d'évènement",
+    )
+    heure_debut = forms.TimeField(
+        required=False, label="Heure de début",
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    heure_fin = forms.TimeField(
+        required=False, label="Heure de fin",
+        widget=forms.TimeInput(attrs={'type': 'time'}),
+    )
+    budget_prevu = forms.BooleanField(
+        required=False, label="Prévu au budget",
+    )
+    nb_participant = forms.IntegerField(
+        required=False, min_value=0, label="Nombre de personnes prévu",
+        widget=forms.NumberInput(attrs={'step': '1', 'min': '0'}),
+    )
+    espace = forms.ChoiceField(
+        choices=ESPACE_CHOICES, required=False, label="Besoin d'un lieu",
+    )
+    parking = forms.BooleanField(required=False, label="Parking")
+    informatique = forms.BooleanField(required=False, label="Matériel informatique")
+    sono = forms.BooleanField(required=False, label="Sono")
+    logistique_intervenant = forms.BooleanField(
+        required=False, label="Besoin logistique pour intervenant externe",
+    )
+    demo = forms.BooleanField(required=False, label="Expérimentation")
+    demo_description = forms.CharField(
+        required=False, max_length=150, label="Détail de l'expérimentation",
+        widget=forms.Textarea(attrs={'rows': 2}),
+        help_text="Précisez succinctement le matériel, dispositif ou scénario souhaité.",
+    )
+    restauration = forms.BooleanField(required=False, label="Restauration")
+    infos_complementaire = forms.CharField(
+        required=False, max_length=500, label="Informations complémentaires",
+        widget=forms.Textarea(attrs={'rows': 3}),
+    )
+
+    def __init__(self, *args, event=None, demande=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['projet'].queryset = Projet.objects.all().order_by('acronyme_projet')
+
+        # Pré-remplissage depuis les instances existantes
+        if not args and not kwargs.get('data'):
+            if event:
+                self.fields['nom_event'].initial = event.nom_event
+                self.fields['date_event'].initial = event.date_event
+            if demande:
+                self.fields['statut_event'].initial = (
+                    demande.statut_event if demande.statut_event != 'nouveau' else 'en_cours'
+                )
+                self.fields['projet'].initial = demande.projet_id
+                self.fields['type_event'].initial = demande.type_event
+                self.fields['heure_debut'].initial = demande.heure_debut
+                self.fields['heure_fin'].initial = demande.heure_fin
+                self.fields['budget_prevu'].initial = demande.budget_prevu
+                self.fields['nb_participant'].initial = demande.nb_participant
+                self.fields['espace'].initial = demande.espace
+                self.fields['parking'].initial = demande.parking
+                self.fields['informatique'].initial = demande.informatique
+                self.fields['sono'].initial = demande.sono
+                self.fields['logistique_intervenant'].initial = demande.logistique_intervenant
+                self.fields['demo'].initial = demande.demo
+                self.fields['demo_description'].initial = demande.demo_description
+                self.fields['restauration'].initial = demande.restauration
+                self.fields['infos_complementaire'].initial = demande.infos_complementaire
+
+    def save_to_instances(self, event, demande):
+        """
+        Applique les données nettoyées sur les instances Event et DemandeEvent
+        et les enregistre. Retourne (event, demande).
+        """
+        cd = self.cleaned_data
+
+        event.nom_event = cd.get('nom_event') or event.nom_event
+        event.date_event = cd.get('date_event') or event.date_event
+        event.save()
+
+        demande.statut_event = cd['statut_event']
+        demande.projet = cd.get('projet')
+        demande.type_event = cd.get('type_event') or ''
+        demande.heure_debut = cd.get('heure_debut')
+        demande.heure_fin = cd.get('heure_fin')
+        demande.budget_prevu = cd.get('budget_prevu', False)
+        demande.nb_participant = cd.get('nb_participant') or 0
+        demande.espace = cd.get('espace') or ''
+        demande.parking = cd.get('parking', False)
+        demande.informatique = cd.get('informatique', False)
+        demande.sono = cd.get('sono', False)
+        demande.logistique_intervenant = cd.get('logistique_intervenant', False)
+        demande.demo = cd.get('demo', False)
+        demande.demo_description = cd.get('demo_description') or ''
+        demande.restauration = cd.get('restauration', False)
+        demande.infos_complementaire = cd.get('infos_complementaire') or ''
+        demande.save()
+
+        return event, demande
+
+
+def get_restauration_formset_pour_fiche(demande, data=None):
+    """Formset restauration pré-rempli avec les créneaux existants d'une demande."""
+    return RestaurationFormSet(
+        data,
+        queryset=Restauration.objects.filter(demande=demande),
+        prefix='restauration',
+    )

@@ -1,0 +1,439 @@
+{% extends "cockpit/base.html" %}
+{% load static %}
+
+{% block title %}Cockpit — {{ event.nom_event|default:"Fiche évènement" }}{% endblock %}
+
+{% block breadcrumb %}
+<a href="{% url 'accueil' %}">Cockpit</a> &gt;
+<a href="{% url 'evenements_accueil' %}">Évènements</a> &gt;
+{{ event.nom_event|default:"Fiche évènement" }}
+{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'evenements_accueil' %}">Évènements</a></li>
+<li><a href="{% url 'evenement_create' %}">Nouvelle demande</a></li>
+{% endblock %}
+
+{% block content %}
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}cockpit-alert{% else %}cockpit-success{% endif %}" style="margin-bottom:1rem;">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
+
+<!-- En-tête : nom + statut + bouton Éditer les invitations (haut, éloigné du bouton Enregistrer) -->
+<div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap;">
+    <div>
+        <h2 style="margin:0 0 0.25rem 0; color:var(--color-gray-dark);">
+            {{ event.nom_event|default:"Évènement sans nom" }}
+        </h2>
+        <span class="cockpit-badge">{{ demande.get_statut_event_display|default:demande.statut_event }}</span>
+    </div>
+    <!-- Bouton édition délibérément en haut, loin du bouton Enregistrer en bas -->
+    <button type="button" class="cockpit-btn" id="btn-editer-invitations">
+        Éditer les invitations
+    </button>
+</div>
+
+<!-- Formulaire principal de la fiche -->
+<form method="post" id="fiche-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="enregistrer">
+
+    <!-- Informations générales -->
+    <div class="cockpit-form-card" style="margin-bottom:1.5rem;">
+        <h3 style="margin-top:0;">Informations générales</h3>
+
+        {% if form.non_field_errors %}
+            <div class="cockpit-alert">{{ form.non_field_errors }}</div>
+        {% endif %}
+        
+        <!-- Affichage des erreurs du formulaire -->
+        {% if form.errors %}
+            <div class="cockpit-alert">{{ form.errors }}</div>
+        {% endif %}
+        {% if restauration_formset.errors %}
+            <div class="cockpit-alert">{{ restauration_formset.errors }}</div>
+        {% endif %}
+
+        <!-- Demandeur : lecture seule -->
+        <div class="cockpit-field">
+            <label>Demandeur</label>
+            <p class="cockpit-readonly">{{ demande.create_by|default:"—" }}</p>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.nom_event.id_for_label }}">{{ form.nom_event.label }}</label>
+            {{ form.nom_event }}
+        </div>
+
+        <div class="cockpit-inline-group">
+            <div class="cockpit-field">
+                <label for="{{ form.date_event.id_for_label }}">{{ form.date_event.label }}</label>
+                {{ form.date_event }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.heure_debut.id_for_label }}">Heure début</label>
+                {{ form.heure_debut }}
+            </div>
+            <div class="cockpit-field">
+                <label for="{{ form.heure_fin.id_for_label }}">Heure fin</label>
+                {{ form.heure_fin }}
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.statut_event.id_for_label }}">Statut</label>
+            {{ form.statut_event }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.projet.id_for_label }}">{{ form.projet.label }}</label>
+            {{ form.projet }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.type_event.id_for_label }}">{{ form.type_event.label }}</label>
+            {{ form.type_event }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.nb_participant.id_for_label }}">{{ form.nb_participant.label }}</label>
+            {{ form.nb_participant }}
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.espace.id_for_label }}">{{ form.espace.label }}</label>
+            {{ form.espace }}
+        </div>
+    </div>
+
+    <!-- Logistique -->
+    <div class="cockpit-form-card" style="margin-bottom:1.5rem;">
+        <h3 style="margin-top:0;">Logistique</h3>
+
+        <div class="cockpit-field">
+            <label class="cockpit-checkbox-field" for="{{ form.budget_prevu.id_for_label }}">
+                {{ form.budget_prevu }}
+                <span>{{ form.budget_prevu.label }}</span>
+            </label>
+        </div>
+
+        <div class="cockpit-checkbox-grid">
+            <label class="cockpit-checkbox-field" for="{{ form.parking.id_for_label }}">
+                {{ form.parking }}<span>{{ form.parking.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.informatique.id_for_label }}">
+                {{ form.informatique }}<span>{{ form.informatique.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.sono.id_for_label }}">
+                {{ form.sono }}<span>{{ form.sono.label }}</span>
+            </label>
+            <label class="cockpit-checkbox-field" for="{{ form.logistique_intervenant.id_for_label }}">
+                {{ form.logistique_intervenant }}<span>{{ form.logistique_intervenant.label }}</span>
+            </label>
+        </div>
+
+        <div class="cockpit-two-col-field">
+            <label class="cockpit-checkbox-field" for="{{ form.demo.id_for_label }}">
+                {{ form.demo }}<span>{{ form.demo.label }}</span>
+            </label>
+            <div class="cockpit-field">
+                {{ form.demo_description }}
+                <p class="cockpit-placeholder">{{ form.demo_description.help_text }}</p>
+            </div>
+        </div>
+
+        <div class="cockpit-two-col-field">
+            <label class="cockpit-checkbox-field" for="{{ form.restauration.id_for_label }}">
+                {{ form.restauration }}<span>{{ form.restauration.label }}</span>
+            </label>
+            <div id="restauration-content">
+                {{ restauration_formset.management_form }}
+                <div id="restauration-rows">
+                    {% for repas_form in restauration_formset %}
+                    <div class="cockpit-eval-row">
+                        {{ repas_form.restauration_id }}
+                        {{ repas_form.type_repas }}
+                        {% if repas_form.instance.pk %}
+                        <label class="cockpit-eval-delete">
+                            {{ repas_form.DELETE }} Supprimer
+                        </label>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="cockpit-btn-secondary" id="add-restauration-row">+ Ajouter un créneau</button>
+                <div id="restauration-empty-form" style="display:none;">
+                    <div class="cockpit-eval-row">{{ restauration_formset.empty_form.type_repas }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="cockpit-field">
+            <label for="{{ form.infos_complementaire.id_for_label }}">{{ form.infos_complementaire.label }}</label>
+            {{ form.infos_complementaire }}
+        </div>
+    </div>
+
+    <!-- Personnes invitées -->
+    <div class="cockpit-form-card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+            <h3 style="margin:0;">Personnes invitées à l'évènement</h3>
+            <!-- Bouton ajouter proche du titre, pas du bouton Enregistrer -->
+            <button type="button" class="cockpit-btn-secondary" id="btn-ajouter-invite">
+                + Ajouter une personne
+            </button>
+        </div>
+
+        <!-- Champ de recherche Tom Select (caché par défaut, affiché au clic) -->
+        <div id="invite-search-zone" style="display:none; margin-bottom:1rem;">
+            <div class="cockpit-field">
+                <label for="id_invite_contact">Rechercher un contact</label>
+                <select id="id_invite_contact" name="invite_contact_id">
+                    <option value="">Rechercher par nom, prénom ou entité...</option>
+                </select>
+            </div>
+            <p class="cockpit-placeholder" id="invite-not-found-msg" style="display:none;">
+                Ce contact n'est pas encore dans Cockpit.
+                <a href="{% url 'contact_create' %}">Créer le contact</a> ou gérer l'invitation en dehors de Cockpit.
+            </p>
+            <div style="display:flex; gap:0.5rem;">
+                <button type="button" class="cockpit-btn" id="btn-confirmer-invite">Ajouter</button>
+                <button type="button" class="cockpit-btn-secondary" id="btn-annuler-invite">Annuler</button>
+            </div>
+        </div>
+
+        <!-- Liste des invités confirmés (avec action_id) -->
+        {% if invites_confirmes %}
+        <div style="margin-bottom:1rem;">
+            <p style="font-size:0.8rem; font-weight:500; color:var(--color-gray-medium); margin-bottom:0.5rem;">
+                INVITATIONS ÉDITÉES
+            </p>
+            {% for invite in invites_confirmes %}
+            <div class="cockpit-eval-row" style="align-items:center;">
+                <div style="flex:1;">
+                    <strong>{{ invite.contact.prenom_contact }} {{ invite.contact.nom_contact }}</strong>
+                    {% if invite.contact.entite %}
+                    <span style="color:var(--color-gray-medium);"> — {{ invite.contact.entite.nom }}</span>
+                    {% endif %}
+                    {% if invite.contact.poste_contact %}
+                    <span style="color:var(--color-gray-medium);"> · {{ invite.contact.poste_contact }}</span>
+                    {% endif %}
+                </div>
+                <form method="post" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="retirer_invite">
+                    <input type="hidden" name="list_invite_id" value="{{ invite.list_invite_id }}">
+                    <button type="submit" class="cockpit-btn-secondary"
+                            onclick="return confirm('Retirer {{ invite.contact.prenom_contact }} {{ invite.contact.nom_contact }} de la liste ? L\'invitation sera marquée comme annulée.');">
+                        Retirer
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Liste des invités en attente (sans action_id) -->
+        {% if invites_attente %}
+        <div>
+            <p style="font-size:0.8rem; font-weight:500; color:var(--color-gray-medium); margin-bottom:0.5rem;">
+                EN ATTENTE D'ÉDITION
+            </p>
+            {% for invite in invites_attente %}
+            <div class="cockpit-eval-row" style="align-items:center;">
+                <div style="flex:1;">
+                    <strong>{{ invite.contact.prenom_contact }} {{ invite.contact.nom_contact }}</strong>
+                    {% if invite.contact.entite %}
+                    <span style="color:var(--color-gray-medium);"> — {{ invite.contact.entite.nom }}</span>
+                    {% endif %}
+                    {% if invite.contact.poste_contact %}
+                    <span style="color:var(--color-gray-medium);"> · {{ invite.contact.poste_contact }}</span>
+                    {% endif %}
+                </div>
+                <form method="post" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="retirer_invite_attente">
+                    <input type="hidden" name="list_invite_id" value="{{ invite.list_invite_id }}">
+                    <button type="submit" class="cockpit-btn-secondary"
+                            onclick="return confirm('Retirer ce contact de la liste d\'attente ?');">
+                        Retirer
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if not invites_confirmes and not invites_attente %}
+        <p class="cockpit-placeholder">Aucune personne dans la liste. Utilisez le bouton "Ajouter une personne" ou "Éditer les invitations" pour en ajouter.</p>
+        {% endif %}
+    </div>
+
+    <!-- Bouton Enregistrer en bas -->
+    <div style="display:flex; justify-content:flex-end;">
+        <button type="submit" class="cockpit-btn">Enregistrer les modifications</button>
+    </div>
+</form>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // -----------------------------------------------------------------------
+    // Expérimentation
+    // -----------------------------------------------------------------------
+    const demoCheckbox = document.getElementById('{{ form.demo.id_for_label }}');
+    const demoDescription = document.getElementById('{{ form.demo_description.id_for_label }}');
+    if (demoCheckbox && demoDescription) {
+        function toggleDemo() { demoDescription.disabled = !demoCheckbox.checked; }
+        demoCheckbox.addEventListener('change', toggleDemo);
+        toggleDemo();
+    }
+
+    // -----------------------------------------------------------------------
+    // Restauration
+    // -----------------------------------------------------------------------
+    const restaurationCheckbox = document.getElementById('{{ form.restauration.id_for_label }}');
+    const restaurationRows = document.getElementById('restauration-rows');
+    const addRestaurationButton = document.getElementById('add-restauration-row');
+    const restaurationEmptyForm = document.getElementById('restauration-empty-form');
+    const restaurationTotalForms = document.querySelector('#id_restauration-TOTAL_FORMS');
+
+    function setRestaurationDisabled(disabled) {
+    if (restaurationRows) {
+        restaurationRows.querySelectorAll('select[name$="-type_repas"]').forEach(el => {
+            el.disabled = disabled;
+        });
+    }
+    if (addRestaurationButton) addRestaurationButton.disabled = disabled;
+}
+
+    if (restaurationCheckbox) {
+        function toggleRestauration() { setRestaurationDisabled(!restaurationCheckbox.checked); }
+        restaurationCheckbox.addEventListener('change', toggleRestauration);
+        toggleRestauration();
+    }
+
+    if (addRestaurationButton && restaurationRows && restaurationEmptyForm && restaurationTotalForms) {
+        addRestaurationButton.addEventListener('click', function () {
+            const idx = parseInt(restaurationTotalForms.value, 10);
+            const html = restaurationEmptyForm.innerHTML.replace(/__prefix__/g, idx);
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            const newRow = wrapper.firstElementChild;
+            restaurationRows.appendChild(newRow);
+            restaurationTotalForms.value = idx + 1;
+            newRow.querySelectorAll('select, input').forEach(el => {
+                el.disabled = !restaurationCheckbox.checked;
+            });
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Tom Select : recherche de contacts pour les invitations
+    // -----------------------------------------------------------------------
+    const btnAjouter = document.getElementById('btn-ajouter-invite');
+    const inviteSearchZone = document.getElementById('invite-search-zone');
+    const inviteNotFoundMsg = document.getElementById('invite-not-found-msg');
+    const btnConfirmer = document.getElementById('btn-confirmer-invite');
+    const btnAnnuler = document.getElementById('btn-annuler-invite');
+
+    let inviteSelect = null;
+
+    btnAjouter.addEventListener('click', function () {
+        inviteSearchZone.style.display = 'block';
+        btnAjouter.style.display = 'none';
+        inviteNotFoundMsg.style.display = 'none';
+
+        if (!inviteSelect) {
+            inviteSelect = new TomSelect('#id_invite_contact', {
+                valueField: 'id',
+                labelField: 'label',
+                searchField: 'label',
+                create: false,
+                load: function (query, callback) {
+                    if (query.length < 2) { callback(); return; }
+                    fetch(`/api/contact/recherche/?q=${encodeURIComponent(query)}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            inviteNotFoundMsg.style.display = data.length === 0 ? 'block' : 'none';
+                            callback(data);
+                        })
+                        .catch(() => callback());
+                },
+                onLoad: function (data) {
+                    inviteNotFoundMsg.style.display = data.length === 0 ? 'block' : 'none';
+                },
+                placeholder: 'Rechercher par nom, prénom ou entité...',
+            });
+        }
+    });
+
+    btnAnnuler.addEventListener('click', function () {
+        inviteSearchZone.style.display = 'none';
+        btnAjouter.style.display = 'block';
+        inviteNotFoundMsg.style.display = 'none';
+        if (inviteSelect) inviteSelect.clear();
+    });
+
+    btnConfirmer.addEventListener('click', function () {
+        const contactId = inviteSelect ? inviteSelect.getValue() : '';
+        if (!contactId) { return; }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.style.display = 'none';
+
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'ajouter_invite';
+
+        const contactInput = document.createElement('input');
+        contactInput.type = 'hidden';
+        contactInput.name = 'contact_id';
+        contactInput.value = contactId;
+
+        form.appendChild(csrfInput);
+        form.appendChild(actionInput);
+        form.appendChild(contactInput);
+        document.body.appendChild(form);
+        form.submit();
+    });
+
+    // -----------------------------------------------------------------------
+    // Bouton "Éditer les invitations" : POST vers l'action dédiée
+    // -----------------------------------------------------------------------
+    document.getElementById('btn-editer-invitations').addEventListener('click', function () {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.style.display = 'none';
+
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        const actionInput = document.createElement('input');
+        actionInput.type = 'hidden';
+        actionInput.name = 'action';
+        actionInput.value = 'editer_invitations';
+
+        form.appendChild(csrfInput);
+        form.appendChild(actionInput);
+        document.body.appendChild(form);
+        form.submit();
+    });
+</script>
+{% endblock %}

@@ -20,4 +20,7 @@ urlpatterns = [
     path('crm/contact/<int:pk>/', views.contact_detail_view, name='contact_detail'),
     path('crm/contact/<int:pk>/statut/', views.changer_statut_contact_projet_depuis_fiche_view, name='changer_statut_contact_projet_fiche'),
     path('api/kanban/statut/', views.changer_statut_carte_view, name='changer_statut_carte'),
+    path('evenements/', views.evenements_accueil_view, name='evenements_accueil'),
+    path('evenements/<int:pk>/', views.evenement_fiche_view, name='evenement_fiche'),
+    path('api/contact/recherche/', views.contacts_recherche_view, name='contact_recherche'),
 ]

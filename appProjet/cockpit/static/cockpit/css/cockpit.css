@@ -599,3 +599,40 @@ a { color: inherit; }
   color: var(--color-gray-medium);
   font-style: italic;
 }
+/* ---------- Évènements : tableau de liste ---------- */
+.cockpit-event-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.cockpit-event-table thead th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-gray-medium);
+  border-bottom: 1px solid var(--color-gray-medium);
+  white-space: nowrap;
+}
+
+.cockpit-event-table tbody tr {
+  border-bottom: 1px solid var(--color-gray-light);
+  transition: background-color 0.1s ease;
+}
+
+.cockpit-event-table tbody tr:hover {
+  background-color: var(--color-gray-light);
+}
+
+.cockpit-event-table tbody td {
+  padding: 0.6rem 0.75rem;
+  color: var(--color-gray-dark);
+  vertical-align: middle;
+}
+
+.cockpit-event-table tbody td:last-child {
+  text-align: right;
+}

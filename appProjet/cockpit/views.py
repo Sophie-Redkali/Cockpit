@@ -1,17 +1,21 @@
+import csv
 from django.shortcuts import render, redirect, get_object_or_404
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Q, ProtectedError
+from django.utils import timezone
+from django.urls import reverse
 from decimal import Decimal
 from datetime import date as date_cls
 
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse, Http404
 
 from .models import (
     Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation,
     ProgStrategique, Domaine, DomaineProjet,
     ContactProjet, Partenaire, Financeur, InteretMembre, Action,
+    ListeInvite, DemandeEvent, Restauration,
 )
 from .forms import (
     ContactForm, EntiteMiniForm, ProjetForm, tabs_visibles_pour,
@@ -26,7 +30,8 @@ from .forms import (
     ProgStrategiqueForm, DomaineForm, enregistrer_statut_contact_projet, enregistrer_statut_entite,
     KANBAN_COLONNES, label_statut_kanban, label_statut_entite,
     ActionForm, ChangerStatutContactGeneralForm, enregistrer_statut_contact_general,
-    STATUT_KANBAN_CHOICES,
+    STATUT_KANBAN_CHOICES, FicheEvenementForm, get_restauration_formset_pour_fiche, get_statut_event_display,
+
 )
 
 # Statuts à partir desquels les jalons (kickoff/mi-parcours/final) et les
@@ -629,6 +634,14 @@ def _construire_cartes(mode, entite_sel, projet_sel):
 
 
 def crm_accueil_view(request):
+    # Visite "à vide" (ex: clic sur le lien menu "CRM", sans filtre dans
+    # l'URL) : on redirige vers le dernier kanban consulté par cet
+    # utilisateur, s'il y en a un en session.
+    if not request.GET:
+        derniers_filtres = request.session.get('crm_derniers_filtres')
+        if derniers_filtres:
+            return redirect(f"{reverse('crm_accueil')}?{derniers_filtres}")
+
     mode = request.GET.get("vue", "entite")
     if mode not in ("entite", "projet"):
         mode = "entite"
@@ -643,22 +656,34 @@ def crm_accueil_view(request):
     statut_label = None
     statut_titre = None
 
-    if mode == "entite":
-        if entite_id:
-            entite_sel = get_object_or_404(Entite, pk=entite_id)
-            projets_lies = _projets_lies_a_entite(entite_sel)
-            statut_titre = "Statut de l'entité (Vedecom)"
-            statut_label = label_statut_entite(entite_sel.statut_entite)
-            if projet_id and projet_id != "all":
-                projet_sel = get_object_or_404(Projet, pk=projet_id)
-    else:
-        if projet_id:
-            projet_sel = get_object_or_404(Projet, pk=projet_id)
-            entites_liees = _entites_liees_a_projet(projet_sel)
-            statut_titre = "Statut du projet"
-            statut_label = projet_sel.get_statut_actuel_display()
-            if entite_id and entite_id != "all":
+    try:
+        if mode == "entite":
+            if entite_id:
                 entite_sel = get_object_or_404(Entite, pk=entite_id)
+                projets_lies = _projets_lies_a_entite(entite_sel)
+                statut_titre = "Statut de l'entité (Vedecom)"
+                statut_label = label_statut_entite(entite_sel.statut_entite)
+                if projet_id and projet_id != "all":
+                    projet_sel = get_object_or_404(Projet, pk=projet_id)
+        else:
+            if projet_id:
+                projet_sel = get_object_or_404(Projet, pk=projet_id)
+                entites_liees = _entites_liees_a_projet(projet_sel)
+                statut_titre = "Statut du projet"
+                statut_label = projet_sel.get_statut_actuel_display()
+                if entite_id and entite_id != "all":
+                    entite_sel = get_object_or_404(Entite, pk=entite_id)
+    except Http404:
+        # L'entité/projet mémorisé n'existe plus (supprimé depuis) : on
+        # oublie ce choix pour éviter de re-proposer une redirection en
+        # boucle vers une ressource introuvable, et on repart sur un
+        # kanban vide.
+        request.session.pop('crm_derniers_filtres', None)
+        return redirect('crm_accueil')
+
+    # Mémorise ce jeu de filtres pour la prochaine visite "à vide".
+    if request.GET:
+        request.session['crm_derniers_filtres'] = request.GET.urlencode()
 
     cartes = _construire_cartes(mode, entite_sel, projet_sel)
 
@@ -797,3 +822,214 @@ def changer_statut_contact_projet_depuis_fiche_view(request, pk):
             else:
                 enregistrer_statut_contact_general(contact, nouveau_statut)
     return redirect("contact_detail", pk=contact.pk)
+
+ 
+# ---------------------------------------------------------------------------
+# Évènements : page d'accueil (liste nouvelles demandes + en cours)
+# ---------------------------------------------------------------------------
+def evenements_accueil_view(request):
+    aujourd_hui = date_cls.today()
+ 
+    # Passage automatique en "terminé" des demandes en_cours dont la date de
+    # l'évènement associé est passée (related_name="events" sur Event.demande)
+    DemandeEvent.objects.filter(
+        statut_event='en_cours',
+        events__date_event__lt=aujourd_hui,
+    ).update(statut_event='termine')
+ 
+    nouvelles = (
+        Event.objects
+        .filter(demande__isnull=False, demande__statut_event='nouveau')
+        .select_related('demande', 'demande__projet')
+        .order_by('date_event')
+    )
+    en_cours = (
+        Event.objects
+        .filter(demande__isnull=False, demande__statut_event='en_cours')
+        .select_related('demande', 'demande__projet')
+        .order_by('date_event')
+    )
+ 
+    return render(request, 'cockpit/evenements_accueil.html', {
+        'nouvelles': nouvelles,
+        'en_cours': en_cours,
+    })
+ 
+ 
+# ---------------------------------------------------------------------------
+# Évènements : fiche de détail / modification
+# ---------------------------------------------------------------------------
+def _export_csv_invitations(event, invites):
+    """
+    Génère et retourne une HttpResponse CSV avec la liste des invités.
+    Colonnes : Prénom, Nom, Entité, Poste, Email.
+    """
+    nom_fichier = f"invitations_{event.nom_event or event.event_id}.csv"
+    # Caractères interdits dans les noms de fichiers
+    nom_fichier = "".join(c if c.isalnum() or c in (' ', '_', '-', '.') else '_' for c in nom_fichier)
+ 
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = f'attachment; filename="{nom_fichier}"'
+ 
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(['Prénom', 'Nom', 'Entité', 'Poste', 'Email'])
+    for invite in invites:
+        c = invite.contact
+        writer.writerow([
+            c.prenom_contact or '',
+            c.nom_contact or '',
+            c.entite.nom if c.entite else '',
+            c.poste_contact or '',
+            c.email_contact or '',
+        ])
+    return response
+ 
+ 
+def evenement_fiche_view(request, pk):
+    event = get_object_or_404(Event, pk=pk, demande__isnull=False)
+    demande = event.demande
+
+    # Queryset des invités — recalculé à chaque requête pour refléter l'état courant
+    def _invites_confirmes():
+        return (
+            ListeInvite.objects
+            .filter(event=event, action__isnull=False)
+            .select_related('contact', 'contact__entite', 'action')
+            .order_by('contact__nom_contact')
+        )
+
+    def _invites_attente():
+        return (
+            ListeInvite.objects
+            .filter(event=event, action__isnull=True)
+            .select_related('contact', 'contact__entite')
+            .order_by('contact__nom_contact')
+        )
+
+    # Valeurs par défaut — écrasées selon l'action POST
+    form = FicheEvenementForm(event=event, demande=demande)
+    restauration_formset = get_restauration_formset_pour_fiche(demande)
+
+    if request.method == 'POST':
+        action_post = request.POST.get('action', '')
+
+        # ---------------------------------------------------------------
+        # Ajouter un invité en attente
+        # ---------------------------------------------------------------
+        if action_post == 'ajouter_invite':
+            contact_id = request.POST.get('contact_id')
+            if contact_id:
+                contact = get_object_or_404(Contact, pk=contact_id)
+                if not ListeInvite.objects.filter(event=event, contact=contact).exists():
+                    ListeInvite.objects.create(event=event, contact=contact)
+                    messages.success(
+                        request,
+                        f"{contact.prenom_contact} {contact.nom_contact} ajouté à la liste d'attente."
+                    )
+            return redirect('evenement_fiche', pk=event.pk)
+
+        # ---------------------------------------------------------------
+        # Éditer les invitations : crée les actions CRM + export CSV
+        # ---------------------------------------------------------------
+        elif action_post == 'editer_invitations':
+            invites_a_editer = list(_invites_attente())
+
+            if not invites_a_editer:
+                messages.warning(request, "Aucune personne en attente d'invitation à éditer.")
+                return redirect('evenement_fiche', pk=event.pk)
+
+            for invite in invites_a_editer:
+                action = Action.objects.create(
+                    contact=invite.contact,
+                    projet=demande.projet,
+                    type_action='Invitation évènement VEDECOM',
+                    objet_action=f'Évènement {event.nom_event or event.event_id}',
+                    date_action=event.date_event,
+                    statut_action='en_cours',
+                )
+                invite.action = action
+                invite.save(update_fields=['action_id'])
+
+            if demande.statut_event == 'nouveau':
+                demande.statut_event = 'en_cours'
+                demande.save(update_fields=['statut_event'])
+
+            tous_les_invites = list(_invites_confirmes())
+            return _export_csv_invitations(event, tous_les_invites)
+
+        # ---------------------------------------------------------------
+        # Retirer un invité confirmé (action → annulé)
+        # ---------------------------------------------------------------
+        elif action_post == 'retirer_invite':
+            list_invite_id = request.POST.get('list_invite_id')
+            invite = get_object_or_404(ListeInvite, pk=list_invite_id, event=event)
+            if invite.action:
+                invite.action.statut_action = 'annule'
+                invite.action.save(update_fields=['statut_action'])
+            invite.delete()
+            messages.success(request, "Invitation retirée et marquée comme annulée.")
+            return redirect('evenement_fiche', pk=event.pk)
+
+        # ---------------------------------------------------------------
+        # Retirer un invité en attente
+        # ---------------------------------------------------------------
+        elif action_post == 'retirer_invite_attente':
+            list_invite_id = request.POST.get('list_invite_id')
+            invite = get_object_or_404(ListeInvite, pk=list_invite_id, event=event)
+            invite.delete()
+            messages.success(request, "Contact retiré de la liste d'attente.")
+            return redirect('evenement_fiche', pk=event.pk)
+
+        # ---------------------------------------------------------------
+        # Enregistrer les modifications de la fiche
+        # ---------------------------------------------------------------
+        elif action_post == 'enregistrer':
+            form = FicheEvenementForm(request.POST, event=event, demande=demande)
+            restauration_formset = get_restauration_formset_pour_fiche(demande, data=request.POST)
+
+            if form.is_valid() and restauration_formset.is_valid():
+                form.save_to_instances(event, demande)
+
+                # Restauration.objects.filter(demande=demande).delete()
+                save_restauration_formset(restauration_formset, demande)
+
+                messages.success(request, "Fiche évènement mise à jour.")
+                return redirect('evenement_fiche', pk=event.pk)
+
+            # form invalide : on retombe sur le render ci-dessous avec
+            # form et restauration_formset contenant les erreurs
+
+    return render(request, 'cockpit/evenement_fiche.html', {
+        'event': event,
+        'demande': demande,
+        'form': form,
+        'restauration_formset': restauration_formset,
+        'invites_confirmes': _invites_confirmes(),
+        'invites_attente': _invites_attente(),
+    })
+ 
+ 
+# ---------------------------------------------------------------------------
+# Endpoint AJAX : recherche de contacts pour Tom Select (invitations)
+# ---------------------------------------------------------------------------
+def contacts_recherche_view(request):
+    q = request.GET.get('q', '')
+    if len(q) < 2:
+        return JsonResponse([], safe=False)
+    contacts = (
+        Contact.objects
+        .filter(
+            Q(nom_contact__icontains=q) |
+            Q(prenom_contact__icontains=q) |
+            Q(entite__nom__icontains=q)
+        )
+        .select_related('entite')
+        .order_by('nom_contact', 'prenom_contact')[:20]
+    )
+    data = [{
+        'id': c.contact_id,
+        'label': f"{c.prenom_contact or ''} {c.nom_contact or ''}".strip()
+                 + (f" — {c.entite.nom}" if c.entite else ''),
+    } for c in contacts]
+    return JsonResponse(data, safe=False)
+ 

@@ -1,0 +1,104 @@
+{% extends "cockpit/base.html" %}
+
+{% block title %}Cockpit — Évènements{% endblock %}
+
+{% block breadcrumb %}<a href="{% url 'accueil' %}">Cockpit</a> &gt; Évènements{% endblock %}
+
+{% block nav_menu %}
+<li><a href="{% url 'accueil' %}">Accueil</a></li>
+<li><a href="{% url 'evenements_accueil' %}">Évènements</a></li>
+<li><a href="{% url 'evenement_create' %}">Nouvelle demande</a></li>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem;">
+    <h2 style="margin:0; color:var(--color-gray-dark);">Évènements</h2>
+    <a href="{% url 'evenement_create' %}" class="cockpit-btn" style="text-decoration:none;">+ Nouvelle demande</a>
+</div>
+
+<!-- Section : Nouvelles demandes -->
+<div class="cockpit-form-card" style="margin-bottom:1.5rem;">
+    <h3 style="margin-top:0; color:var(--color-green-dark); font-size:0.95rem; text-transform:uppercase; letter-spacing:0.05em;">
+        Nouvelles demandes
+    </h3>
+
+    {% if nouvelles %}
+    <table class="cockpit-event-table">
+        <thead>
+            <tr>
+                <th>Évènement</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Projet</th>
+                <th>Demandeur</th>
+                <th>Participants</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in nouvelles %}
+            <tr>
+                <td><strong>{{ event.nom_event|default:"—" }}</strong></td>
+                <td>{{ event.date_event|date:"d/m/Y"|default:"—" }}</td>
+                <td>{{ event.demande.get_type_event_display|default:"—" }}</td>
+                <td>{{ event.demande.projet.acronyme_projet|default:"—" }}</td>
+                <td>{{ event.demande.create_by|default:"—" }}</td>
+                <td>{{ event.demande.nb_participant|default:"0" }}</td>
+                <td>
+                    <a href="{% url 'evenement_fiche' event.event_id %}" class="cockpit-btn-secondary" style="text-decoration:none; white-space:nowrap;">
+                        Voir la fiche
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="cockpit-placeholder">Aucune nouvelle demande.</p>
+    {% endif %}
+</div>
+
+<!-- Section : Demandes en cours -->
+<div class="cockpit-form-card">
+    <h3 style="margin-top:0; color:var(--color-green-dark); font-size:0.95rem; text-transform:uppercase; letter-spacing:0.05em;">
+        En cours
+    </h3>
+
+    {% if en_cours %}
+    <table class="cockpit-event-table">
+        <thead>
+            <tr>
+                <th>Évènement</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Projet</th>
+                <th>Demandeur</th>
+                <th>Participants</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for event in en_cours %}
+            <tr>
+                <td><strong>{{ event.nom_event|default:"—" }}</strong></td>
+                <td>{{ event.date_event|date:"d/m/Y"|default:"—" }}</td>
+                <td>{{ event.demande.get_type_event_display|default:"—" }}</td>
+                <td>{{ event.demande.projet.acronyme_projet|default:"—" }}</td>
+                <td>{{ event.demande.create_by|default:"—" }}</td>
+                <td>{{ event.demande.nb_participant|default:"0" }}</td>
+                <td>
+                    <a href="{% url 'evenement_fiche' event.event_id %}" class="cockpit-btn-secondary" style="text-decoration:none; white-space:nowrap;">
+                        Voir la fiche
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="cockpit-placeholder">Aucun évènement en cours.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

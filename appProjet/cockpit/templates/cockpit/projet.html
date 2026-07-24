@@ -162,7 +162,7 @@
                     <div id="partenaire-rows">
                         {% for partenaire_form in partenaire_formset %}
                         <div class="cockpit-eval-row">
-                            {{ partenaire_form.id }}
+                            {{ partenaire_form.partenaire_id }}
                             {{ partenaire_form.entite }}
                             {% if partenaire_form.instance.pk %}
                             <label class="cockpit-eval-delete">
@@ -216,7 +216,7 @@
                     <div id="equipe-rows">
                         {% for equipe_form in equipe_formset %}
                         <div class="cockpit-eval-row">
-                            {{ equipe_form.id }}
+                            {{ equipe_form.equipe_id }}
                             {{ equipe_form.nom_equipier }}
                             {% if equipe_form.instance.pk %}
                             <label class="cockpit-eval-delete">
@@ -253,7 +253,7 @@
                     <div id="benefice-rows">
                         {% for eval_form in benefice_formset %}
                         <div class="cockpit-eval-row">
-                            {{ eval_form.id }}
+                            {{ eval_form.eval_id }}
                             {{ eval_form.contenu }}
                             {% if eval_form.instance.pk %}
                             <label class="cockpit-eval-delete">

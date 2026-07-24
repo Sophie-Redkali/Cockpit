@@ -128,7 +128,7 @@ Nouvelle demande d'organisation
                 <div id="restauration-rows">
                     {% for repas_form in restauration_formset %}
                     <div class="cockpit-eval-row">
-                        {{ repas_form.id }}
+                        {{ repas_form.restauration_id }}
                         {{ repas_form.type_repas }}
                         {% if repas_form.instance.pk %}
                         <label class="cockpit-eval-delete">

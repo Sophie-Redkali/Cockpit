@@ -61,6 +61,11 @@
 
         <div class="cockpit-field">
             <label for="id_entite">Entité (employeur)</label>
+            <div id="entite-actuelle-data"
+                data-id="{% if contact.entite %}{{ contact.entite.entite_id }}{% endif %}"
+                data-nom="{% if contact.entite %}{{ contact.entite.nom }}{% endif %}"
+                style="display:none;">
+            </div>
             {{ form.entite_selection }}
             <p class="cockpit-placeholder">
                 Entité introuvable dans la liste ? Choisissez "Autre" pour en enregistrer une nouvelle.
@@ -212,28 +217,37 @@
 
 {% block extra_scripts %}
 <script>
-    const entiteMiniForm = document.getElementById('entite-mini-form');
-    const nomEntiteInput = document.getElementById('{{ entite_mini_form.nom.id_for_label }}');
+    const entiteActuelleEl = document.getElementById('entite-actuelle-data');
+const entiteActuelleId = entiteActuelleEl.dataset.id;
+const entiteActuelleNom = entiteActuelleEl.dataset.nom;
 
-    new TomSelect('#id_entite', {
-        valueField: "id",
-        labelField: "nom",
-        searchField: "nom",
-        create: false,
-        options: [{ id: "autre", nom: "Autre (entité non trouvée, à créer)" }],
-        load: function (query, callback) {
-            fetch(`/api/entite/recherche/?q=${encodeURIComponent(query)}`)
-                .then(res => res.json())
-                .then(data => callback(data))
-                .catch(() => callback());
-        },
-        onChange: function (value) {
-            entiteMiniForm.style.display = (value === 'autre') ? 'block' : 'none';
-        },
-    });
+const tomSelectOptions = [
+    { id: "autre", nom: "Autre (entité non trouvée, à créer)" },
+];
+if (entiteActuelleId) {
+    tomSelectOptions.push({ id: entiteActuelleId, nom: entiteActuelleNom });
+}
+
+new TomSelect('#id_entite', {
+    valueField: "id",
+    labelField: "nom",
+    searchField: "nom",
+    create: false,
+    options: tomSelectOptions,
+    items: entiteActuelleId ? [entiteActuelleId] : [],
+    load: function (query, callback) {
+        fetch(`/api/entite/recherche/?q=${encodeURIComponent(query)}`)
+            .then(res => res.json())
+            .then(data => callback(data))
+            .catch(() => callback());
+    },
+    onChange: function (value) {
+        entiteMiniForm.style.display = (value === 'autre') ? 'block' : 'none';
+    },
+});
 
     if (entiteMiniForm.dataset.hasErrors === 'true') {
         entiteMiniForm.style.display = 'block';
-    }
+    };
 </script>
 {% endblock %}
