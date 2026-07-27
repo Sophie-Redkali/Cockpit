@@ -143,6 +143,11 @@
                     {{ form.budget_total }}
                 </div>
 
+                <!-- Le management_form doit TOUJOURS être présent dans le HTML envoyé,
+                     même si la section visuelle est masquée (stade vivier) : sinon Django
+                     ne peut pas interpréter le formset ("ManagementForm data is missing"). -->
+                {{ partenaire_formset.management_form }}
+
                 {% if est_au_dela_du_vivier %}
                 <!-- Champs apparaissant à partir du cadrage -->
                 <div class="cockpit-field">
@@ -158,7 +163,6 @@
 
                 <div class="cockpit-eval-section">
                     <h3>Partenaires du projet</h3>
-                    {{ partenaire_formset.management_form }}
                     <div id="partenaire-rows">
                         {% for partenaire_form in partenaire_formset %}
                         <div class="cockpit-eval-row">

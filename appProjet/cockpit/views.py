@@ -11,10 +11,11 @@ from datetime import date as date_cls
 
 from django.http import JsonResponse, HttpResponse, Http404
 
+# MODIFIÉ : HistoriqueStatutContactProjet ajouté aux imports
 from .models import (
     Entite, DocumentSharepoint, Projet, Event, Contact, Vacation, HeureVacation,
     ProgStrategique, Domaine, DomaineProjet,
-    ContactProjet, Partenaire, Financeur, InteretMembre, Action,
+    ContactProjet, HistoriqueStatutContactProjet, Partenaire, Financeur, InteretMembre, Action,
     ListeInvite, DemandeEvent, Restauration,
 )
 from .forms import (
@@ -299,29 +300,29 @@ def _calculer_total_equivalent_td(prenom, nom, annee):
     """
     if not (prenom and nom and annee):
         return Decimal('0')
- 
+
     heures = HeureVacation.objects.filter(
         vacation__prenom__iexact=prenom,
         vacation__nom__iexact=nom,
         vacation__annee=annee,
     ).values_list('nb_heure', 'type_cours')
- 
+
     total = Decimal('0')
     for nb_heure, type_cours in heures:
         total += calculer_equivalent_td(nb_heure, type_cours)
     return total
- 
- 
+
+
 def vacation_create_view(request):
     if request.method == "POST":
         heure_form = HeureVacationForm(request.POST)
         vacation_form = VacationForm(request.POST)
         cours_selection = (request.POST.get("cours_selection") or "").strip()
- 
+
         if heure_form.is_valid():
             vacation = None
             erreur_cours = None
- 
+
             if not cours_selection:
                 erreur_cours = "Merci de sélectionner un cours existant ou d'en créer un nouveau dans « Intitulé »."
             elif cours_selection.startswith(VACATION_NOUVEAU_PREFIX):
@@ -338,7 +339,7 @@ def vacation_create_view(request):
                     vacation = Vacation.objects.get(pk=cours_selection)
                 except (Vacation.DoesNotExist, ValueError):
                     erreur_cours = "Le cours sélectionné est introuvable."
- 
+
             if erreur_cours:
                 heure_form.add_error(None, erreur_cours)
             else:
@@ -349,15 +350,15 @@ def vacation_create_view(request):
     else:
         heure_form = HeureVacationForm()
         vacation_form = VacationForm()
- 
+
     return render(request, "cockpit/vacation.html", {
         "heure_form": heure_form,
         "vacation_form": vacation_form,
         "seuil_salarie": SEUIL_EQUIVALENT_TD_SALARIE,
         "seuil_doctorant": SEUIL_EQUIVALENT_TD_DOCTORANT,
     })
- 
- 
+
+
 def vacation_recherche_view(request):
     """
     Recherche AJAX (Tom Select) des cours déjà déclarés par l'utilisateur
@@ -368,10 +369,10 @@ def vacation_recherche_view(request):
     q = request.GET.get("q", "")
     prenom = request.GET.get("prenom", "")
     nom = request.GET.get("nom", "")
- 
+
     if not (prenom and nom):
         return JsonResponse([], safe=False)
- 
+
     annee_courante = date_cls.today().year
     qs = Vacation.objects.filter(
         prenom__iexact=prenom,
@@ -381,7 +382,7 @@ def vacation_recherche_view(request):
     if q:
         qs = qs.filter(intitule__icontains=q)
     qs = qs.select_related('entite', 'strat').order_by('-annee', 'intitule')[:20]
- 
+
     data = [{
         "id": v.vacation_id,
         "intitule": v.intitule,
@@ -393,8 +394,8 @@ def vacation_recherche_view(request):
         "strat_id": v.strat_id,
     } for v in qs]
     return JsonResponse(data, safe=False)
- 
- 
+
+
 def vacation_total_view(request):
     """Endpoint AJAX : total équivalent TD déjà enregistré pour prénom/nom/année."""
     prenom = request.GET.get("prenom", "")
@@ -403,7 +404,7 @@ def vacation_total_view(request):
         annee = int(request.GET.get("annee", ""))
     except (TypeError, ValueError):
         annee = None
- 
+
     total = _calculer_total_equivalent_td(prenom, nom, annee)
     return JsonResponse({
         "total": float(total),
@@ -502,43 +503,43 @@ def gestion_referentiels_view(request):
 def changer_statut_contact_projet_view(request):
     if request.method != "POST":
         return JsonResponse({"erreur": "Méthode non autorisée."}, status=405)
- 
+
     contact = get_object_or_404(Contact, pk=request.POST.get("contact_id"))
     projet = get_object_or_404(Projet, pk=request.POST.get("projet_id"))
     nouveau_statut = request.POST.get("statut_kanban", "")
- 
+
     if not nouveau_statut:
         return JsonResponse({"erreur": "Le statut est obligatoire."}, status=400)
- 
+
     # create_by : nom saisi manuellement en attendant Azure AD, comme pour
     # les autres formulaires de l'application.
     create_by = request.POST.get("create_by", "")
- 
+
     contact_projet = enregistrer_statut_contact_projet(contact, projet, nouveau_statut, create_by)
     return JsonResponse({
         "contact_projet_id": contact_projet.contact_projet_id,
         "statut_kanban": contact_projet.statut_kanban,
     })
- 
- 
+
+
 def changer_statut_entite_view(request):
     if request.method != "POST":
         return JsonResponse({"erreur": "Méthode non autorisée."}, status=405)
- 
+
     entite = get_object_or_404(Entite, pk=request.POST.get("entite_id"))
     nouveau_statut = request.POST.get("statut_entite", "")
- 
+
     if not nouveau_statut:
         return JsonResponse({"erreur": "Le statut est obligatoire."}, status=400)
- 
+
     create_by = request.POST.get("create_by", "")
- 
+
     entite = enregistrer_statut_entite(entite, nouveau_statut, create_by)
     return JsonResponse({
         "entite_id": entite.entite_id,
         "statut_entite": entite.statut_entite,
     })
- 
+
 
 # ---------------------------------------------------------------------------
 # CRM : page d'accueil (filtres entité/projet + kanban des contacts)
@@ -592,27 +593,93 @@ def _carte(contact, statut_kanban, projet_a_afficher, projet_pour_action, cle):
     }
 
 
+# NOUVEAU
+def _get_ou_creer_contact_projet(contact, projet):
+    """
+    Retourne la ligne ContactProjet pour ce couple, en la créant avec le
+    statut par défaut '1er_contact' si elle n'existe pas encore.
+    La création est déclenchée dès qu'une action lie le contact à ce projet,
+    même si l'utilisateur n'a pas encore modifié le statut kanban manuellement.
+    """
+    cp, created = ContactProjet.objects.get_or_create(
+        contact=contact,
+        projet=projet,
+        defaults={'statut_kanban': '1er_contact'},
+    )
+    if created:
+        # Journalise le statut initial dans l'historique
+        HistoriqueStatutContactProjet.objects.create(
+            contact_projet=cp,
+            statut_atteint='1er_contact',
+            create_by=None,
+        )
+    return cp
+
+
+# NOUVEAU
+def _contacts_sur_projet(projet, entite_filtre=None):
+    """
+    Ensemble des contacts à afficher pour un projet donné dans le kanban.
+    Réunit :
+      - les contacts déjà en ContactProjet pour ce projet,
+      - les contacts ayant au moins une Action sur ce projet (source de vérité
+        métier) mais pas encore de ligne ContactProjet.
+    Pour chaque contact trouvé uniquement via Action, une ligne ContactProjet
+    est créée à la volée avec le statut '1er_contact'.
+    Retourne une liste de ContactProjet.
+    """
+    # Contacts déjà suivis via ContactProjet
+    cp_qs = ContactProjet.objects.filter(projet=projet).select_related('contact', 'contact__entite')
+    if entite_filtre:
+        cp_qs = cp_qs.filter(contact__entite=entite_filtre)
+    cp_ids_contacts = set(cp_qs.values_list('contact_id', flat=True))
+
+    # Contacts ayant une action sur ce projet mais sans ContactProjet
+    actions_qs = Action.objects.filter(projet=projet).select_related('contact', 'contact__entite')
+    if entite_filtre:
+        actions_qs = actions_qs.filter(contact__entite=entite_filtre)
+
+    contacts_via_action = {}
+    for action in actions_qs:
+        c = action.contact
+        if c.contact_id not in cp_ids_contacts and c.contact_id not in contacts_via_action:
+            contacts_via_action[c.contact_id] = c
+
+    # Création à la volée des ContactProjet manquants
+    nouveaux_cp = []
+    for contact in contacts_via_action.values():
+        cp = _get_ou_creer_contact_projet(contact, projet)
+        nouveaux_cp.append(cp)
+
+    # Rechargement pour avoir les instances fraîches avec select_related
+    if nouveaux_cp:
+        nouveaux_ids = [cp.contact_projet_id for cp in nouveaux_cp]
+        nouveaux_cp = list(
+            ContactProjet.objects.filter(contact_projet_id__in=nouveaux_ids)
+            .select_related('contact', 'contact__entite')
+        )
+
+    return list(cp_qs) + nouveaux_cp
+
+
+# MODIFIÉ
 def _construire_cartes(mode, entite_sel, projet_sel):
     """
     Construit la liste des cartes à répartir dans le kanban, selon le mode
-    actif et les sélections faites. Cf explications données à l'utilisateur :
-    - mode 'entite' + projet précis : contacts de l'entité suivis sur CE projet.
+    actif et les sélections faites.
+    - mode 'entite' + projet précis : contacts de l'entité ayant une Action
+      ou un ContactProjet sur CE projet (création ContactProjet à la volée).
     - mode 'entite' + "Tout afficher" : tous les contacts de l'entité, une
-      carte par association projet (ou une carte "générale" s'ils n'ont
-      aucune association projet).
-    - mode 'projet' + entité précise : contacts de cette entité suivis sur
-      le projet.
-    - mode 'projet' + "Tout afficher" : tous les contacts suivis sur ce
-      projet, quelle que soit leur entité.
+      carte par association projet via ContactProjet (ou carte "générale").
+    - mode 'projet' + entité précise : contacts de cette entité sur le projet.
+    - mode 'projet' + "Tout afficher" : tous les contacts sur ce projet.
     """
     cartes = []
 
     if mode == "entite" and entite_sel:
         if projet_sel:
-            qs = ContactProjet.objects.filter(
-                contact__entite=entite_sel, projet=projet_sel
-            ).select_related('contact', 'contact__entite')
-            for cp in qs:
+            # Inclut les contacts liés par Action, pas seulement ContactProjet
+            for cp in _contacts_sur_projet(projet_sel, entite_filtre=entite_sel):
                 cartes.append(_carte(cp.contact, cp.statut_kanban, None, projet_sel, f"cp:{cp.contact_projet_id}"))
         else:
             for contact in Contact.objects.filter(entite=entite_sel).select_related('entite'):
@@ -624,10 +691,9 @@ def _construire_cartes(mode, entite_sel, projet_sel):
                     cartes.append(_carte(contact, contact.statut_kanban, None, None, f"general:{contact.contact_id}"))
 
     elif mode == "projet" and projet_sel:
-        qs = ContactProjet.objects.filter(projet=projet_sel).select_related('contact', 'contact__entite')
-        if entite_sel:
-            qs = qs.filter(contact__entite=entite_sel)
-        for cp in qs:
+        # Inclut les contacts liés par Action, pas seulement ContactProjet
+        entite_filtre = entite_sel if entite_sel else None
+        for cp in _contacts_sur_projet(projet_sel, entite_filtre=entite_filtre):
             cartes.append(_carte(cp.contact, cp.statut_kanban, None, projet_sel, f"cp:{cp.contact_projet_id}"))
 
     return cartes
@@ -823,20 +889,20 @@ def changer_statut_contact_projet_depuis_fiche_view(request, pk):
                 enregistrer_statut_contact_general(contact, nouveau_statut)
     return redirect("contact_detail", pk=contact.pk)
 
- 
+
 # ---------------------------------------------------------------------------
 # Évènements : page d'accueil (liste nouvelles demandes + en cours)
 # ---------------------------------------------------------------------------
 def evenements_accueil_view(request):
     aujourd_hui = date_cls.today()
- 
+
     # Passage automatique en "terminé" des demandes en_cours dont la date de
     # l'évènement associé est passée (related_name="events" sur Event.demande)
     DemandeEvent.objects.filter(
         statut_event='en_cours',
         events__date_event__lt=aujourd_hui,
     ).update(statut_event='termine')
- 
+
     nouvelles = (
         Event.objects
         .filter(demande__isnull=False, demande__statut_event='nouveau')
@@ -849,13 +915,13 @@ def evenements_accueil_view(request):
         .select_related('demande', 'demande__projet')
         .order_by('date_event')
     )
- 
+
     return render(request, 'cockpit/evenements_accueil.html', {
         'nouvelles': nouvelles,
         'en_cours': en_cours,
     })
- 
- 
+
+
 # ---------------------------------------------------------------------------
 # Évènements : fiche de détail / modification
 # ---------------------------------------------------------------------------
@@ -867,10 +933,10 @@ def _export_csv_invitations(event, invites):
     nom_fichier = f"invitations_{event.nom_event or event.event_id}.csv"
     # Caractères interdits dans les noms de fichiers
     nom_fichier = "".join(c if c.isalnum() or c in (' ', '_', '-', '.') else '_' for c in nom_fichier)
- 
+
     response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
     response['Content-Disposition'] = f'attachment; filename="{nom_fichier}"'
- 
+
     writer = csv.writer(response, delimiter=';')
     writer.writerow(['Prénom', 'Nom', 'Entité', 'Poste', 'Email'])
     for invite in invites:
@@ -883,8 +949,8 @@ def _export_csv_invitations(event, invites):
             c.email_contact or '',
         ])
     return response
- 
- 
+
+
 def evenement_fiche_view(request, pk):
     event = get_object_or_404(Event, pk=pk, demande__isnull=False)
     demande = event.demande
@@ -1007,8 +1073,8 @@ def evenement_fiche_view(request, pk):
         'invites_confirmes': _invites_confirmes(),
         'invites_attente': _invites_attente(),
     })
- 
- 
+
+
 # ---------------------------------------------------------------------------
 # Endpoint AJAX : recherche de contacts pour Tom Select (invitations)
 # ---------------------------------------------------------------------------
@@ -1032,4 +1098,3 @@ def contacts_recherche_view(request):
                  + (f" — {c.entite.nom}" if c.entite else ''),
     } for c in contacts]
     return JsonResponse(data, safe=False)
- 

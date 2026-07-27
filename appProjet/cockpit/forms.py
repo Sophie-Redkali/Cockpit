@@ -557,6 +557,15 @@ class DescriptionScientifiqueForm(forms.ModelForm):
 def save_description_scientifique(form, projet):
     """Enregistre la fiche 1-1 DescriptionScientifique en la rattachant au projet."""
     instance = form.save(commit=False)
+    champs_textuels = [
+        'objectifs_projet', 'axes_feuille_route', 'principaux_resultats',
+        'besoins_materiels_logiciels', 'theses_prevues',
+    ]
+    if not any((getattr(instance, champ) or '').strip() for champ in champs_textuels):
+        if instance.pk:
+            instance.delete()
+        return None
+    
     instance.projet = projet
     instance.save()
     return instance

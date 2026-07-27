@@ -51,7 +51,7 @@ CREATE TABLE projet_mgmt.PROG_STRATEGIQUE (
 
 CREATE TABLE projet_mgmt.PROJET (
 	projet_id INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-	strat_id INTEGER NOT NULL,
+	strat_id INTEGER,
 	nom_projet VARCHAR(255),
 	acronyme_projet VARCHAR(50),
 	confidentiel BOOLEAN DEFAULT FALSE,
