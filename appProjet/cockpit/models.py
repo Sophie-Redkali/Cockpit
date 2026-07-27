@@ -897,6 +897,7 @@ class DocumentSharepoint(models.Model):
 
     class Meta:
         managed = True  # cette table est créée/gérée par Django (makemigrations)
+        db_table = '"projet_mgmt"."document_sharepoint"'
         indexes = [
             models.Index(fields=['content_type', 'object_id']),
         ]
