@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${VOLUME_NAME:-postgres_data}:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
@@ -26,7 +26,8 @@ services:
     volumes:
       - ./appProjet:/app
     ports:
-      - "8000:8000"
+      - "${WEB_PORT:-8000}:8000"
 
 volumes:
   postgres_data:
+  postgres_data_recette:
