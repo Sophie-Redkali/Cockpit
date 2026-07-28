@@ -153,18 +153,16 @@ SP_TENANT_ID = config('SP_TENANT_ID', default='')
 SP_CLIENT_ID = config('SP_CLIENT_ID', default='')
 SP_CLIENT_SECRET = config('SP_CLIENT_SECRET', default='')
 
-
 # localisation du dossier de stockage dans SharePoint
 # emplacement définitif à définir avec l'IT
-# un dossier lié à chaque projet / contact sera créé à la volée
-SP_SITE_HOSTENAME = "vedecominstitut.sharepoint.com"
-SP_SITE_PATH = "sites/vedecom-ds" # temporaire, un emplacement pour les différents documents devras être déterminé
+SP_SITE_HOSTNAME = config('SP_SITE_HOSTNAME', default='')
+SP_SITE_PATH = config('SP_SITE_PATH', default='')
 
-# dossiers spécifiques aux types de formulaires:
-# permet de ne pas mélanger les documents liés aux projet avec ceux liés aux contacts
-# des sous-dossiers sont créés dynamiquements pour lier chaque document à son projet ou contact
-SP_FOLDER = {
-    "contact": "CRM/Contacts",
-    "projets": "Projets",
-    "theses": "Theses",
+# dossiers spécifiques aux types de formulaires : permet de ne pas mélanger
+# les documents liés aux projets avec ceux liés aux contacts. Des sous-dossiers
+# sont créés dynamiquement pour lier chaque document à son projet ou contact.
+SP_FOLDERS = {
+    "contact": config('SP_FOLDER_CONTACT', default='CRM/Contacts'),
+    "projets": config('SP_FOLDER_PROJETS', default='Projets'),
+    "theses": config('SP_FOLDER_THESES', default='Theses'),
 }
