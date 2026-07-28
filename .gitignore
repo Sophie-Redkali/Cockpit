@@ -3,3 +3,6 @@ app_vedecom/
 *.pyc
 .env
 db.sqlite3
+.env.dev
+.env.recette
+.env.prod
